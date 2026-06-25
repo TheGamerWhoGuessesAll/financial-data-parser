@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 import openpyxl
 from openpyxl.utils import get_column_letter
 from openpyxl.styles import PatternFill, Font, Alignment
+from openpyxl.chart import PieChart3D, Reference
 
 app = FastAPI(title="Financial Data Parser")
 
@@ -30,10 +31,8 @@ async def upload_file(
     if file.filename and not file.filename.lower().endswith('.csv'):
         raise HTTPException(status_code=400, detail="Only .csv files are supported")
 
-    # Read the uploaded CSV file
     contents = await file.read()
     
-    # Load into pandas DataFrame
     try:
         df = pd.read_csv(io.BytesIO(contents))
     except Exception as e:
@@ -41,7 +40,6 @@ async def upload_file(
     
     user_keywords = [k.strip().lower() for k in keywords.split(',') if k.strip()]
 
-    # Create an in-memory buffer for the Excel file
     buffer = io.BytesIO()
 
     # Opaque ARGB formatting for heatmaps
@@ -61,18 +59,18 @@ async def upload_file(
         df.to_excel(writer, index=False, sheet_name='Anomaly Report')
         worksheet = writer.sheets['Anomaly Report']
         
-        # 1. Premium Features: Freeze Top Row & Add AutoFilter
+        # Premium Features: Freeze Top Row & Add AutoFilter
         worksheet.freeze_panes = "A2"
         max_col_letter = get_column_letter(len(df.columns))
         max_row = len(df) + 1
         worksheet.auto_filter.ref = f"A1:{max_col_letter}{max_row}"
         
-        # 2. Auto-adjust column widths
+        # Auto-adjust column widths
         for idx, col in enumerate(df.columns):
             max_len = max(df[col].astype(str).map(len).max(), len(str(col))) + 2
             worksheet.column_dimensions[get_column_letter(idx + 1)].width = min(max_len, 50)
             
-        # 3. Find which columns are numeric vs text
+        # Find which columns are numeric vs text and compute robust median
         numeric_cols = []
         text_cols = []
         stats = {}
@@ -80,67 +78,81 @@ async def upload_file(
             if pd.api.types.is_numeric_dtype(df[col]):
                 numeric_cols.append(idx + 1)
                 stats[idx + 1] = {
-                    'mean': df[col].mean(),
-                    'std': df[col].std()
+                    'median': df[col].median()
                 }
             elif pd.api.types.is_string_dtype(df[col]) or pd.api.types.is_object_dtype(df[col]):
                 text_cols.append(idx + 1)
 
-        anomalous_rows = set()
+        # Track severity categories for pie charts
+        severity_counts = {
+            "Severe": 0,
+            "Suspicious": 0,
+            "Slight": 0,
+            "Text": 0,
+            "Clean": 0
+        }
 
-        # 4. Apply Heatmap background colors
+        # Apply Heatmap background colors using robust median stats
         for row in range(2, len(df) + 2):
+            row_severity = "Clean"
+            
+            # Check Text Anomalies
             for col_idx in text_cols:
                 cell = worksheet.cell(row=row, column=col_idx)
                 if isinstance(cell.value, str):
                     if any(k in cell.value.lower() for k in user_keywords):
                         cell.fill = red_fill
                         cell.font = red_font
-                        anomalous_rows.add(row)
+                        row_severity = "Text"
             
+            # Check Numeric Anomalies (Overrides text if severity is higher)
             for col_idx in numeric_cols:
                 cell = worksheet.cell(row=row, column=col_idx)
                 val = cell.value
                 if val is not None and isinstance(val, (int, float)):
-                    mean = stats[col_idx]['mean']
+                    median = stats[col_idx]['median']
+                    base_val = abs(median) if median != 0 else 1.0
+                    ratio = abs(val) / base_val
                     
-                    if val > (mean * 3.0):
+                    if ratio >= 5.0:
                         cell.fill = severe_fill
                         cell.font = severe_font
-                        anomalous_rows.add(row)
-                    elif val > (mean * 2.0):
+                        row_severity = "Severe"
+                    elif ratio >= 2.5:
                         cell.fill = red_fill
                         cell.font = red_font
-                        anomalous_rows.add(row)
-                    elif val > (mean * 1.5):
-                        cell.fill = orange_fill
-                        cell.font = orange_font
-                        anomalous_rows.add(row)
-                    elif val > (mean * 1.2): # Slightly suspicious
+                        if row_severity != "Severe":
+                            row_severity = "Suspicious"
+                    elif ratio >= 1.5:
                         cell.fill = yellow_fill
                         cell.font = yellow_font
-                        anomalous_rows.add(row)
+                        if row_severity not in ["Severe", "Suspicious"]:
+                            row_severity = "Slight"
+                            
+            severity_counts[row_severity] += 1
 
-        # 5. Create Summary Dashboard Sheet
+        # Create Summary Dashboard Sheet
         dashboard = writer.book.create_sheet("Summary Dashboard", 0)
         dashboard.sheet_view.showGridLines = False
         
         dashboard.column_dimensions['A'].width = 25
         dashboard.column_dimensions['B'].width = 15
+        dashboard.column_dimensions['C'].width = 15
+        dashboard.column_dimensions['D'].width = 20
         
         title_cell = dashboard['A1']
         title_cell.value = "Financial Anomaly Dashboard"
         title_cell.font = Font(size=18, bold=True, color="FF2F5597")
         
         total_rows = len(df)
-        anomaly_count = len(anomalous_rows)
-        pct_anomalies = (anomaly_count / total_rows) * 100 if total_rows > 0 else 0
+        total_anomalies = total_rows - severity_counts["Clean"]
+        pct_anomalies = (total_anomalies / total_rows) * 100 if total_rows > 0 else 0
         
         dashboard['A3'] = "Total Transactions:"
         dashboard['B3'] = total_rows
         
-        dashboard['A4'] = "Anomalies Detected:"
-        dashboard['B4'] = anomaly_count
+        dashboard['A4'] = "Total Anomalies:"
+        dashboard['B4'] = total_anomalies
         
         dashboard['A5'] = "Suspicious Rate:"
         dashboard['B5'] = f"{pct_anomalies:.1f}%"
@@ -149,23 +161,71 @@ async def upload_file(
             dashboard[f'A{r}'].font = Font(bold=True)
             dashboard[f'B{r}'].alignment = Alignment(horizontal='left')
             if r in [4, 5]:
-                color = "FF990000" if anomaly_count > 0 else "FF006100"
+                color = "FF990000" if total_anomalies > 0 else "FF006100"
                 dashboard[f'B{r}'].font = Font(bold=True, color=color)
             else:
                 dashboard[f'B{r}'].font = Font(bold=True)
                 
+        # Breakdown Table
+        dashboard['A8'] = "Anomaly Type"
+        dashboard['B8'] = "Count"
+        dashboard['C8'] = "% of Total"
+        dashboard['D8'] = "% of Anomalies"
+        
+        for col in ['A', 'B', 'C', 'D']:
+            dashboard[f'{col}8'].font = Font(bold=True, color="FFFFFFFF")
+            dashboard[f'{col}8'].fill = PatternFill(start_color="FF2F5597", end_color="FF2F5597", fill_type="solid")
+            dashboard[f'{col}8'].alignment = Alignment(horizontal="center")
+            
+        categories = ["Severe", "Suspicious", "Slight", "Text", "Clean"]
+        for i, cat in enumerate(categories):
+            row = 9 + i
+            count = severity_counts[cat]
+            pct_total = (count / total_rows) if total_rows > 0 else 0
+            pct_anom = (count / total_anomalies) if (total_anomalies > 0 and cat != "Clean") else 0
+            
+            dashboard[f'A{row}'] = cat
+            dashboard[f'B{row}'] = count
+            dashboard[f'C{row}'] = pct_total
+            dashboard[f'C{row}'].number_format = '0.0%'
+            
+            if cat == "Clean":
+                dashboard[f'D{row}'] = "N/A"
+            else:
+                dashboard[f'D{row}'] = pct_anom
+                dashboard[f'D{row}'].number_format = '0.0%'
+                
+        # Add Dual 3D Pie Charts
+        pie1 = PieChart3D()
+        pie1.title = "Dataset Breakdown (Whole Set)"
+        labels1 = Reference(dashboard, min_col=1, min_row=9, max_row=13)
+        data1 = Reference(dashboard, min_col=2, min_row=8, max_row=13)
+        pie1.add_data(data1, titles_from_data=True)
+        pie1.set_categories(labels1)
+        pie1.width = 12
+        pie1.height = 8
+        dashboard.add_chart(pie1, "F2")
+        
+        if total_anomalies > 0:
+            pie2 = PieChart3D()
+            pie2.title = "Anomaly Distribution (Anomalies Only)"
+            labels2 = Reference(dashboard, min_col=1, min_row=9, max_row=12) # Exclude Clean
+            data2 = Reference(dashboard, min_col=2, min_row=8, max_row=12)
+            pie2.add_data(data2, titles_from_data=True)
+            pie2.set_categories(labels2)
+            pie2.width = 12
+            pie2.height = 8
+            dashboard.add_chart(pie2, "F17")
+                
         # Set Dashboard as the active sheet when opened
         writer.book.active = 0
         
-    # Reset buffer position to the beginning before returning
     buffer.seek(0)
     
-    # Generate the new filename (replace extension with .xlsx)
     original_filename = file.filename or "data.csv"
     base_name = original_filename.rsplit('.', 1)[0]
     excel_filename = f"{base_name}_anomalies.xlsx"
     
-    # Return as a downloadable Excel file
     return StreamingResponse(
         buffer,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
