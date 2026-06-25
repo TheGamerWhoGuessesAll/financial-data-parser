@@ -8,6 +8,18 @@ import pdfplumber
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, BackgroundTasks
 from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
+from datetime import datetime, timedelta
+from pydantic import BaseModel
+from sqlalchemy import create_engine, Column, Integer, String
+from sqlalchemy.orm import declarative_base, sessionmaker, Session
+from passlib.context import CryptContext
+import jwt
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+from fastapi.security import OAuth2PasswordBearer
+from fastapi import Depends, Request
+
 import openpyxl
 from openpyxl.utils import get_column_letter
 from openpyxl.styles import PatternFill, Font, Alignment, Border, Side
@@ -25,6 +37,108 @@ app.add_middleware(
     expose_headers=["Content-Disposition"],
 )
 
+
+# Database Setup
+DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./test.db")
+if DATABASE_URL.startswith("postgres://"):
+    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+
+engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False} if "sqlite" in DATABASE_URL else {})
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+Base = declarative_base()
+
+class User(Base):
+    __tablename__ = "users"
+    id = Column(Integer, primary_key=True, index=True)
+    email = Column(String, unique=True, index=True)
+    hashed_password = Column(String)
+
+Base.metadata.create_all(bind=engine)
+
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+# Auth Setup
+SECRET_KEY = os.getenv("SECRET_KEY", "super-secret-key-for-jwt-do-not-share")
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7 # 7 days
+
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
+
+def verify_password(plain_password, hashed_password):
+    return pwd_context.verify(plain_password, hashed_password)
+
+def get_password_hash(password):
+    return pwd_context.hash(password)
+
+def create_access_token(data: dict):
+    to_encode = data.copy()
+    expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    to_encode.update({"exp": expire})
+    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    return encoded_jwt
+
+def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
+    credentials_exception = HTTPException(
+        status_code=401,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        email: str = payload.get("sub")
+        if email is None:
+            raise credentials_exception
+    except jwt.PyJWTError:
+        raise credentials_exception
+        
+    user = db.query(User).filter(User.email == email).first()
+    if user is None:
+        raise credentials_exception
+    return user
+
+# Pydantic Models
+class UserCreate(BaseModel):
+    email: str
+    password: str
+
+class UserLogin(BaseModel):
+    email: str
+    password: str
+
+# Rate Limiter Setup
+limiter = Limiter(key_func=get_remote_address)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+@app.post("/signup")
+@limiter.limit("10/minute")
+def signup(request: Request, user: UserCreate, db: Session = Depends(get_db)):
+    db_user = db.query(User).filter(User.email == user.email).first()
+    if db_user:
+        raise HTTPException(status_code=400, detail="Email already registered")
+    hashed_password = get_password_hash(user.password)
+    new_user = User(email=user.email, hashed_password=hashed_password)
+    db.add(new_user)
+    db.commit()
+    db.refresh(new_user)
+    access_token = create_access_token(data={"sub": new_user.email})
+    return {"access_token": access_token, "token_type": "bearer"}
+
+@app.post("/login")
+@limiter.limit("5/minute")
+def login(request: Request, user: UserLogin, db: Session = Depends(get_db)):
+    db_user = db.query(User).filter(User.email == user.email).first()
+    if not db_user or not verify_password(user.password, db_user.hashed_password):
+        raise HTTPException(status_code=401, detail="Incorrect email or password")
+    access_token = create_access_token(data={"sub": db_user.email})
+    return {"access_token": access_token, "token_type": "bearer"}
+
 TASK_STORE = {}
 
 @app.get("/")
@@ -35,7 +149,8 @@ async def read_root():
 async def upload_file(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
-    keywords: str = Form(default="suspicious, fraud, unauthorized, error, anomaly")
+    keywords: str = Form(default="suspicious, fraud, unauthorized, error, anomaly"),
+    current_user: User = Depends(get_current_user)
 ):
     is_pdf = file.filename and file.filename.lower().endswith('.pdf')
     is_csv = file.filename and file.filename.lower().endswith('.csv')
@@ -52,15 +167,16 @@ async def upload_file(
         "progress": 0,
         "message": "Initializing task...",
         "result": None,
-        "filename": file.filename or "data.csv"
+        "filename": file.filename or "data.csv",
+        "user_email": current_user.email
     }
     
     background_tasks.add_task(process_file_task, task_id, contents, is_csv, is_pdf, keywords)
     return {"task_id": task_id}
 
 @app.get("/status/{task_id}")
-async def get_status(task_id: str):
-    if task_id not in TASK_STORE:
+async def get_status(task_id: str, current_user: User = Depends(get_current_user)):
+    if task_id not in TASK_STORE or TASK_STORE[task_id].get("user_email") != current_user.email:
         raise HTTPException(status_code=404, detail="Task not found")
     return {
         "status": TASK_STORE[task_id]["status"],
@@ -69,8 +185,8 @@ async def get_status(task_id: str):
     }
 
 @app.get("/download/{task_id}")
-async def download_file(task_id: str):
-    if task_id not in TASK_STORE:
+async def download_file(task_id: str, current_user: User = Depends(get_current_user)):
+    if task_id not in TASK_STORE or TASK_STORE[task_id].get("user_email") != current_user.email:
         raise HTTPException(status_code=404, detail="Task not found")
     
     task_data = TASK_STORE[task_id]
@@ -244,7 +360,7 @@ async def process_file_task(task_id: str, contents: bytes, is_csv: bool, is_pdf:
                                 try:
                                     # Use the asynchronous client
                                     response = await client.aio.models.generate_content(
-                                        model='gemini-2.0-flash',
+                                        model='gemini-1.5-flash-8b',
                                         contents=prompt,
                                         config=types.GenerateContentConfig(
                                             response_mime_type="application/json",
