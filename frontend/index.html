@@ -7,7 +7,21 @@
     <link rel="stylesheet" href="index.css">
 </head>
 <body>
-    <div class="container">
+    <button id="logoutBtn" class="logout-btn">Logout</button>
+
+    <div id="authOverlay" class="auth-overlay">
+        <div class="auth-modal">
+            <h1>Welcome</h1>
+            <p>Please login or sign up</p>
+            <input type="email" id="authEmail" class="auth-input" placeholder="Email" required>
+            <input type="password" id="authPassword" class="auth-input" placeholder="Password" required>
+            <button id="loginBtn" class="auth-btn">Login</button>
+            <button id="signupBtn" class="auth-btn secondary">Sign Up</button>
+            <div id="authStatus" style="color: #ef4444; margin-top: 10px; font-size: 14px;"></div>
+        </div>
+    </div>
+
+    <div class="container" id="mainApp" style="display: none;">
         <h1>Data Parser</h1>
         <p>Upload your financial records for processing</p>
         
