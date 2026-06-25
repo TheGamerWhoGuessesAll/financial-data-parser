@@ -40,41 +40,55 @@ async def upload_file(
     
     user_keywords = [k.strip().lower() for k in keywords.split(',') if k.strip()]
 
-    def highlight_numeric_outliers(s):
-        # Process numeric series
-        if pd.api.types.is_numeric_dtype(s):
-            mean = s.mean()
-            # New highly-sensitive threshold: 
-            # If a value is 1.5x larger than the average, flag it!
-            threshold = mean * 1.5
-            
-            return ['background-color: #fee2e2; color: #991b1b; font-weight: bold' if pd.notna(val) and val > threshold else '' for val in s]
-        return [''] * len(s)
-
-    def highlight_text(s):
-        # Process text series
-        if pd.api.types.is_string_dtype(s) or pd.api.types.is_object_dtype(s):
-            return ['background-color: #fee2e2; color: #991b1b; font-weight: bold' if isinstance(val, str) and any(k in val.lower() for k in user_keywords) else '' for val in s]
-        return [''] * len(s)
-
-    try:
-        # Apply numeric and text highlighting column by column
-        styled_df = df.style.apply(highlight_numeric_outliers, axis=0).apply(highlight_text, axis=0)
-    except Exception as e:
-        print(f"Styling error: {e}")
-        styled_df = df
-
     # Create an in-memory buffer for the Excel file
     buffer = io.BytesIO()
 
+    from openpyxl.styles import PatternFill, Font
+    # Using 100% Opaque ARGB formatting
+    red_fill = PatternFill(start_color="FFFEE2E2", end_color="FFFEE2E2", fill_type="solid")
+    red_font = Font(color="FF991B1B", bold=True)
+
     with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
-        styled_df.to_excel(writer, index=False, sheet_name='Anomaly Report')
+        df.to_excel(writer, index=False, sheet_name='Anomaly Report')
         worksheet = writer.sheets['Anomaly Report']
         
-        # Auto-adjust column widths for a premium, highly structured look
+        # 1. Auto-adjust column widths
         for idx, col in enumerate(df.columns):
             max_len = max(df[col].astype(str).map(len).max(), len(str(col))) + 2
             worksheet.column_dimensions[get_column_letter(idx + 1)].width = min(max_len, 50)
+            
+        # 2. Find which columns are numeric vs text
+        numeric_cols = []
+        text_cols = []
+        stats = {}
+        for idx, col in enumerate(df.columns):
+            if pd.api.types.is_numeric_dtype(df[col]):
+                numeric_cols.append(idx + 1)
+                stats[idx + 1] = {
+                    'mean': df[col].mean(),
+                    'std': df[col].std()
+                }
+            elif pd.api.types.is_string_dtype(df[col]) or pd.api.types.is_object_dtype(df[col]):
+                text_cols.append(idx + 1)
+
+        # 3. Apply opaque background colors directly (bypassing pandas styling bugs)
+        for row in range(2, len(df) + 2):
+            for col_idx in text_cols:
+                cell = worksheet.cell(row=row, column=col_idx)
+                if isinstance(cell.value, str):
+                    if any(k in cell.value.lower() for k in user_keywords):
+                        cell.fill = red_fill
+                        cell.font = red_font
+            
+            for col_idx in numeric_cols:
+                cell = worksheet.cell(row=row, column=col_idx)
+                val = cell.value
+                if val is not None and isinstance(val, (int, float)):
+                    mean = stats[col_idx]['mean']
+                    threshold = mean * 1.5
+                    if val > threshold:
+                        cell.fill = red_fill
+                        cell.font = red_font
         
     # Reset buffer position to the beginning before returning
     buffer.seek(0)
