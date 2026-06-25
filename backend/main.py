@@ -39,15 +39,37 @@ async def upload_file(
     try:
         df = pd.read_csv(io.BytesIO(contents))
         
-        # Sort by Date if available
+        # Dynamically scan contents for Date/Time format
         date_col = None
         for col in df.columns:
-            if 'date' in str(col).lower() or 'time' in str(col).lower():
+            if pd.api.types.is_datetime64_any_dtype(df[col]):
                 date_col = col
                 break
+            
+            # Scan columns that are strings/objects to see if they hold date patterns
+            if pd.api.types.is_string_dtype(df[col]) or pd.api.types.is_object_dtype(df[col]):
+                sample_idx = df[col].first_valid_index()
+                if sample_idx is not None:
+                    sample_val = str(df[col].loc[sample_idx])
+                    # Ensure it has typical date/time separators to avoid parsing regular numbers as dates
+                    if any(c in sample_val for c in ['-', '/', ':']):
+                        try:
+                            # Test parsing the single value
+                            pd.to_datetime(sample_val)
+                            # If it parses, test the whole column (requiring >50% valid dates)
+                            parsed_col = pd.to_datetime(df[col], errors='coerce')
+                            if parsed_col.notna().sum() > (df[col].notna().sum() * 0.5):
+                                date_col = col
+                                df[date_col] = parsed_col
+                                break
+                        except Exception:
+                            pass
                 
         if date_col:
-            df[date_col] = pd.to_datetime(df[date_col], errors='coerce')
+            # If we didn't assign the parsed column yet (e.g. it was already datetime64), ensure it is datetime
+            if not pd.api.types.is_datetime64_any_dtype(df[date_col]):
+                df[date_col] = pd.to_datetime(df[date_col], errors='coerce')
+                
             df = df.sort_values(by=date_col).reset_index(drop=True)
             df[date_col] = df[date_col].dt.strftime('%Y-%m-%d %H:%M:%S').fillna(df[date_col])
             
