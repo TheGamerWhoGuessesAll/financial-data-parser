@@ -2,6 +2,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const dropzone = document.getElementById('dropzone');
     const fileInput = document.getElementById('fileInput');
     const statusEl = document.getElementById('status');
+    const progressContainer = document.getElementById('progressContainer');
+    const progressBar = document.getElementById('progressBar');
+    const progressText = document.getElementById('progressText');
+    const progressPercent = document.getElementById('progressPercent');
 
     // Prevent default drag behaviors
     ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
@@ -58,50 +62,74 @@ document.addEventListener('DOMContentLoaded', () => {
         statusEl.className = 'status ' + type;
     }
 
+    function updateProgress(percent, message) {
+        progressContainer.style.display = 'block';
+        progressBar.style.width = percent + '%';
+        progressText.textContent = message;
+        progressPercent.textContent = percent + '%';
+    }
+
     async function handleFiles(file) {
-        setStatus('Processing file...', 'loading');
+        setStatus('', '');
+        updateProgress(0, 'Uploading file...');
 
         const formData = new FormData();
         formData.append('file', file);
         
-        // --- NEW FEATURE: Read keywords and send to backend ---
-        const keywordsInput = document.getElementById('keywords');
-        if (keywordsInput) {
-            formData.append('keywords', keywordsInput.value);
-        }
-        // ------------------------------------------------------
+        const keywords = document.getElementById('keywords').value;
+        formData.append('keywords', keywords);
+
+        const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.protocol === 'file:';
+        const baseUrl = isLocalhost 
+            ? 'http://127.0.0.1:8000' 
+            : 'https://financial-data-parser-backend.onrender.com';
 
         try {
-            const response = await fetch('https://financial-data-parser.onrender.com/upload', {
+            // Step 1: Upload file and get task_id
+            const uploadResponse = await fetch(`${baseUrl}/upload`, {
                 method: 'POST',
                 body: formData
             });
 
-            if (!response.ok) {
-                let errorMessage = `Server error: ${response.status}`;
-                try {
-                    const errData = await response.json();
-                    if (errData && errData.detail) {
-                        errorMessage = errData.detail;
-                    }
-                } catch (e) {
-                    // Response was not JSON
-                }
-                throw new Error(errorMessage);
+            if (!uploadResponse.ok) {
+                throw new Error(`Server error: ${uploadResponse.status}`);
             }
 
-            // Expecting the backend to return the parsed Excel file (.xlsx)
-            const blob = await response.blob();
+            const data = await uploadResponse.json();
+            const taskId = data.task_id;
+
+            // Step 2: Poll for status
+            let completed = false;
+            while (!completed) {
+                await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second
+                
+                const statusResponse = await fetch(`${baseUrl}/status/${taskId}`);
+                if (!statusResponse.ok) continue;
+
+                const statusData = await statusResponse.json();
+                updateProgress(statusData.progress, statusData.message);
+
+                if (statusData.status === 'completed') {
+                    completed = true;
+                } else if (statusData.status === 'error') {
+                    throw new Error(statusData.message || "An error occurred during processing.");
+                }
+            }
+
+            // Step 3: Download the file
+            updateProgress(100, 'Downloading report...');
+            const downloadResponse = await fetch(`${baseUrl}/download/${taskId}`);
             
-            // Create a temporary link to download the blob
+            if (!downloadResponse.ok) throw new Error("Failed to download result.");
+
+            const blob = await downloadResponse.blob();
             const url = window.URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.style.display = 'none';
             a.href = url;
             
-            // Attempt to get filename from Content-Disposition header, fallback to default
             let filename = 'processed_financial_data.xlsx';
-            const disposition = response.headers.get('Content-Disposition');
+            const disposition = downloadResponse.headers.get('Content-Disposition');
             if (disposition && disposition.indexOf('attachment') !== -1) {
                 const filenameRegex = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/;
                 const matches = filenameRegex.exec(disposition);
@@ -114,14 +142,13 @@ document.addEventListener('DOMContentLoaded', () => {
             document.body.appendChild(a);
             a.click();
             
-            // Cleanup
             window.URL.revokeObjectURL(url);
             document.body.removeChild(a);
 
-            setStatus('File processed and downloaded!', 'success');
+            setStatus('File processed and downloaded successfully!', 'success');
             
-            // Reset dropzone state after delay
             setTimeout(() => {
+                progressContainer.style.display = 'none';
                 statusEl.textContent = '';
                 statusEl.className = 'status';
                 fileInput.value = '';
@@ -129,6 +156,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         } catch (error) {
             console.error('Upload error:', error);
+            progressContainer.style.display = 'none';
             setStatus(error.message || 'Error processing file. Ensure backend is running.', 'error');
         }
     }
