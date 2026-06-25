@@ -5,12 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Financial Data Parser</title>
     <link rel="stylesheet" href="index.css">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 </head>
 <body>
     <div class="container">
-        <h1>Financial Data Parser</h1>
-        <p class="subtitle">Upload unstructured financial data for processing</p>
+        <h1>Data Parser</h1>
+        <p>Upload your financial records for processing</p>
         
         <div class="dropzone" id="dropzone">
             <div class="icon">📄</div>
@@ -22,6 +21,16 @@
         <div style="margin-top: 20px; text-align: left;">
             <label for="keywords" style="display: block; margin-bottom: 8px; color: var(--text-light); font-size: 14px; font-weight: 500;">Suspicious Keywords (comma separated):</label>
             <input type="text" id="keywords" value="suspicious, fraud, unauthorized, error, anomaly" style="width: 100%; padding: 12px; border-radius: 8px; border: 1px solid #cbd5e1; box-sizing: border-box; font-family: inherit; color: var(--text); background: #f8fafc; transition: border-color 0.3s ease;">
+        </div>
+
+        <div id="progressContainer" style="display: none; margin-top: 20px;">
+            <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
+                <span id="progressText" style="color: var(--text-light); font-size: 14px; font-weight: 500;">Starting...</span>
+                <span id="progressPercent" style="color: var(--primary); font-size: 14px; font-weight: bold;">0%</span>
+            </div>
+            <div style="width: 100%; height: 10px; background: #e2e8f0; border-radius: 5px; overflow: hidden;">
+                <div id="progressBar" style="width: 0%; height: 100%; background: var(--primary); transition: width 0.3s ease;"></div>
+            </div>
         </div>
 
         <div id="status" class="status"></div>
