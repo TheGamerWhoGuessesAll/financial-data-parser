@@ -1,4 +1,72 @@
 document.addEventListener('DOMContentLoaded', () => {
+    const authOverlay = document.getElementById('authOverlay');
+    const mainApp = document.getElementById('mainApp');
+    const loginBtn = document.getElementById('loginBtn');
+    const signupBtn = document.getElementById('signupBtn');
+    const logoutBtn = document.getElementById('logoutBtn');
+    const authEmail = document.getElementById('authEmail');
+    const authPassword = document.getElementById('authPassword');
+    const authStatus = document.getElementById('authStatus');
+
+    const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.protocol === 'file:';
+    const baseUrl = isLocalhost 
+        ? 'http://127.0.0.1:8000' 
+        : 'https://financial-data-parser.onrender.com';
+
+    function checkAuth() {
+        const token = localStorage.getItem('token');
+        if (token) {
+            authOverlay.style.display = 'none';
+            mainApp.style.display = 'block';
+            logoutBtn.style.display = 'block';
+        } else {
+            authOverlay.style.display = 'flex';
+            mainApp.style.display = 'none';
+            logoutBtn.style.display = 'none';
+        }
+    }
+
+    async function handleAuth(endpoint) {
+        const email = authEmail.value;
+        const password = authPassword.value;
+        if (!email || !password) {
+            authStatus.innerText = 'Email and password are required.';
+            return;
+        }
+        
+        authStatus.innerText = 'Please wait...';
+        try {
+            const response = await fetch(`${baseUrl}/${endpoint}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email, password })
+            });
+            const data = await response.json();
+            
+            if (response.ok) {
+                localStorage.setItem('token', data.access_token);
+                authStatus.innerText = '';
+                authEmail.value = '';
+                authPassword.value = '';
+                checkAuth();
+            } else {
+                authStatus.innerText = data.detail || 'Authentication failed.';
+            }
+        } catch (e) {
+            authStatus.innerText = 'Network error. Please try again.';
+        }
+    }
+
+    loginBtn.addEventListener('click', () => handleAuth('login'));
+    signupBtn.addEventListener('click', () => handleAuth('signup'));
+    
+    logoutBtn.addEventListener('click', () => {
+        localStorage.removeItem('token');
+        checkAuth();
+    });
+
+    checkAuth();
+
     const dropzone = document.getElementById('dropzone');
     const fileInput = document.getElementById('fileInput');
     const statusEl = document.getElementById('status');
@@ -79,17 +147,21 @@ document.addEventListener('DOMContentLoaded', () => {
         const keywords = document.getElementById('keywords').value;
         formData.append('keywords', keywords);
 
-        const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.protocol === 'file:';
-        const baseUrl = isLocalhost 
-            ? 'http://127.0.0.1:8000' 
-            : 'https://financial-data-parser.onrender.com';
+
 
         try {
             // Step 1: Upload file and get task_id
+            const token = localStorage.getItem('token');
             const uploadResponse = await fetch(`${baseUrl}/upload`, {
                 method: 'POST',
+                headers: { 'Authorization': `Bearer ${token}` },
                 body: formData
             });
+            if (uploadResponse.status === 401) {
+                localStorage.removeItem('token');
+                checkAuth();
+                throw new Error("Session expired. Please login again.");
+            }
 
             if (!uploadResponse.ok) {
                 throw new Error(`Server error: ${uploadResponse.status}`);
@@ -103,7 +175,10 @@ document.addEventListener('DOMContentLoaded', () => {
             while (!completed) {
                 await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second
                 
-                const statusResponse = await fetch(`${baseUrl}/status/${taskId}`);
+                const token = localStorage.getItem('token');
+                const statusResponse = await fetch(`${baseUrl}/status/${taskId}`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
                 if (!statusResponse.ok) continue;
 
                 const statusData = await statusResponse.json();
@@ -118,7 +193,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
             // Step 3: Download the file
             updateProgress(100, 'Downloading report...');
-            const downloadResponse = await fetch(`${baseUrl}/download/${taskId}`);
+            const downloadResponse = await fetch(`${baseUrl}/download/${taskId}`, {
+                headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+            });
             
             if (!downloadResponse.ok) throw new Error("Failed to download result.");
 
