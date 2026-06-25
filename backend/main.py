@@ -5,8 +5,9 @@ import uuid
 import asyncio
 import pandas as pd
 import pdfplumber
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException, BackgroundTasks
-from fastapi.responses import StreamingResponse
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, BackgroundTasks, Depends, Request
+from fastapi.responses import StreamingResponse, HTMLResponse
+from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from datetime import datetime, timedelta
 from pydantic import BaseModel
@@ -141,9 +142,6 @@ def login(request: Request, user: UserLogin, db: Session = Depends(get_db)):
 
 TASK_STORE = {}
 
-@app.get("/")
-async def read_root():
-    return {"message": "Welcome to the Financial Data Parser API! The service is online and active."}
 
 @app.post("/upload")
 async def upload_file(
@@ -644,3 +642,10 @@ async def process_file_task(task_id: str, contents: bytes, is_csv: bool, is_pdf:
         print(f"Error in background task: {e}")
         TASK_STORE[task_id]["status"] = "error"
         TASK_STORE[task_id]["message"] = f"Error: {str(e)}"
+
+
+import os
+if os.path.exists("frontend"):
+    app.mount("/", StaticFiles(directory="frontend", html=True), name="frontend")
+elif os.path.exists("../frontend"):
+    app.mount("/", StaticFiles(directory="../frontend", html=True), name="frontend")
