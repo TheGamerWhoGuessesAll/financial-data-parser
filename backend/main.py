@@ -218,8 +218,8 @@ async def process_file_task(task_id: str, contents: bytes, is_csv: bool, is_pdf:
                     TASK_STORE[task_id]["message"] = f"AI Analyzing {len(df)} transactions concurrently..."
                     TASK_STORE[task_id]["progress"] = 50
                     
-                    # Limit concurrency to 3 to respect rate limits and memory
-                    semaphore = asyncio.Semaphore(3)
+                    # Limit concurrency to 1 to completely avoid Free Tier burst rate limits
+                    semaphore = asyncio.Semaphore(1)
                     
                     async def process_chunk(chunk):
                         async with semaphore:
@@ -239,6 +239,7 @@ async def process_file_task(task_id: str, contents: bytes, is_csv: bool, is_pdf:
                             {json.dumps(chunk)}
                             """
                             
+                            last_error = "Unknown error"
                             for attempt in range(3):
                                 try:
                                     # Use the asynchronous client
@@ -249,17 +250,26 @@ async def process_file_task(task_id: str, contents: bytes, is_csv: bool, is_pdf:
                                             response_mime_type="application/json",
                                         ),
                                     )
-                                    return json.loads(response.text)
+                                    text = response.text
+                                    if text.startswith("```json"):
+                                        text = text.replace("```json", "").replace("```", "").strip()
+                                    elif text.startswith("```"):
+                                        text = text.replace("```", "").strip()
+                                        
+                                    parsed = json.loads(text)
+                                    if parsed is None:
+                                        parsed = {}
+                                    return parsed
                                 except Exception as e:
-                                    if "429" in str(e) or attempt < 2:
+                                    last_error = str(e)
+                                    if hasattr(e, 'message'):
+                                        last_error = e.message
+                                    if attempt < 2:
                                         await asyncio.sleep(2 ** attempt)
                                     else:
-                                        # Return the error message so the user sees it in the Excel file instead of silent failure
-                                        # The 'google.genai.errors.APIError' overrides str() poorly sometimes, so we extract the actual message if possible
-                                        err_msg = str(e)
-                                        if hasattr(e, 'message'):
-                                            err_msg = e.message
-                                        return {str(item["id"]): f"AI Error: {err_msg}" for item in chunk}
+                                        return {str(item["id"]): f"AI Error: {last_error}" for item in chunk}
+                            
+                            return {str(item["id"]): f"AI Error: {last_error}" for item in chunk}
                     
                     tasks = [process_chunk(chunk) for chunk in chunks]
                     results = await asyncio.gather(*tasks)
