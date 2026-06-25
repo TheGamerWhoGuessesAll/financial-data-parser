@@ -82,13 +82,13 @@ async def upload_file(
             if pd.api.types.is_numeric_dtype(df[col]):
                 numeric_cols.append(idx + 1)
                 abs_data = df[col].abs()
-                q25 = abs_data.quantile(0.25)
+                q10 = abs_data.quantile(0.10)
                 median = abs_data.median()
                 mean = abs_data.mean()
                 
-                # Use Q1 as the robust baseline to catch large anomalies even if there are many of them.
-                # If Q1 is 0, fallback to Median -> Mean -> 1.0 to prevent division by zero.
-                base_val = q25
+                # Use Q10 as the robust baseline to anchor to the "typical small transaction".
+                # If Q10 is 0, fallback to Median -> Mean -> 1.0 to prevent division by zero.
+                base_val = q10
                 if base_val == 0:
                     base_val = median
                 if base_val == 0:
@@ -232,6 +232,8 @@ async def upload_file(
         pie1.add_data(data1, titles_from_data=True)
         pie1.set_categories(labels1)
         pie1.dataLabels = DataLabelList()
+        pie1.dataLabels.showSerName = False
+        pie1.dataLabels.showVal = False
         pie1.dataLabels.showCatName = True
         pie1.dataLabels.showPercent = True
         pie1.legend = None
@@ -248,6 +250,8 @@ async def upload_file(
             pie2.add_data(data2, titles_from_data=True)
             pie2.set_categories(labels2)
             pie2.dataLabels = DataLabelList()
+            pie2.dataLabels.showSerName = False
+            pie2.dataLabels.showVal = False
             pie2.dataLabels.showCatName = True
             pie2.dataLabels.showPercent = True
             pie2.legend = None
