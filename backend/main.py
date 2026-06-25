@@ -14,6 +14,7 @@ app.add_middleware(
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["Content-Disposition"],
 )
 
 @app.get("/")
@@ -59,7 +60,8 @@ async def upload_file(
     try:
         # Apply numeric and text highlighting column by column
         styled_df = df.style.apply(highlight_numeric_outliers, axis=0).apply(highlight_text, axis=0)
-    except Exception:
+    except Exception as e:
+        print(f"Styling error: {e}")
         styled_df = df
 
     # Create an in-memory buffer for the Excel file
