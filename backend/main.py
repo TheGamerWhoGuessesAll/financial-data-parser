@@ -35,8 +35,7 @@ async def read_root():
 async def upload_file(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
-    keywords: str = Form(default="suspicious, fraud, unauthorized, error, anomaly"),
-    use_ai: bool = Form(default=True)
+    keywords: str = Form(default="suspicious, fraud, unauthorized, error, anomaly")
 ):
     is_pdf = file.filename and file.filename.lower().endswith('.pdf')
     is_csv = file.filename and file.filename.lower().endswith('.csv')
@@ -56,7 +55,7 @@ async def upload_file(
         "filename": file.filename or "data.csv"
     }
     
-    background_tasks.add_task(process_file_task, task_id, contents, is_csv, is_pdf, keywords, use_ai)
+    background_tasks.add_task(process_file_task, task_id, contents, is_csv, is_pdf, keywords)
     return {"task_id": task_id}
 
 @app.get("/status/{task_id}")
@@ -93,7 +92,7 @@ async def download_file(task_id: str):
         headers={"Content-Disposition": f"attachment; filename={excel_filename}"}
     )
 
-async def process_file_task(task_id: str, contents: bytes, is_csv: bool, is_pdf: bool, keywords: str, use_ai: bool):
+async def process_file_task(task_id: str, contents: bytes, is_csv: bool, is_pdf: bool, keywords: str):
     try:
         TASK_STORE[task_id]["message"] = "Extracting data..."
         TASK_STORE[task_id]["progress"] = 10
@@ -182,10 +181,10 @@ async def process_file_task(task_id: str, contents: bytes, is_csv: bool, is_pdf:
         user_keywords = [k.strip().lower() for k in keywords.split(',') if k.strip()]
 
         # AI Contextual Assessment
-        ai_assessments = ["AI Disabled"] * len(df)
-        if use_ai:
-            TASK_STORE[task_id]["message"] = "Connecting to Gemini AI..."
-            TASK_STORE[task_id]["progress"] = 40
+        ai_assessments = ["AI Pending"] * len(df)
+        
+        TASK_STORE[task_id]["message"] = "Connecting to Gemini AI..."
+        TASK_STORE[task_id]["progress"] = 40
             
             api_key = os.getenv("GEMINI_API_KEY")
             if not api_key:
@@ -219,8 +218,8 @@ async def process_file_task(task_id: str, contents: bytes, is_csv: bool, is_pdf:
                         TASK_STORE[task_id]["message"] = f"AI Analyzing {len(df)} transactions concurrently..."
                         TASK_STORE[task_id]["progress"] = 50
                         
-                        # Limit concurrency to 15 to respect rate limits
-                        semaphore = asyncio.Semaphore(15)
+                        # Limit concurrency to 3 to respect rate limits and memory
+                        semaphore = asyncio.Semaphore(3)
                         
                         async def process_chunk(chunk):
                             async with semaphore:
@@ -255,7 +254,8 @@ async def process_file_task(task_id: str, contents: bytes, is_csv: bool, is_pdf:
                                         if "429" in str(e) or attempt < 2:
                                             await asyncio.sleep(2 ** attempt)
                                         else:
-                                            return {}
+                                            # Return the error message so the user sees it in the Excel file instead of silent failure
+                                            return {str(item["id"]): f"AI Error: {str(e)}" for item in chunk}
                         
                         tasks = [process_chunk(chunk) for chunk in chunks]
                         results = await asyncio.gather(*tasks)
