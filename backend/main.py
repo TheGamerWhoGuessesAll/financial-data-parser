@@ -302,7 +302,11 @@ async def upload_file(
             # AI Check
             ai_cell = worksheet.cell(row=row, column=ai_col_idx)
             ai_val = str(ai_cell.value).lower()
-            if "fraud" in ai_val or "suspicious" in ai_val:
+            
+            # Use an exclusion check so any AI reasoning is flagged, regardless of phrasing
+            is_normal = "clean" in ai_val or "missing" in ai_val or "disabled" in ai_val or "error" in ai_val
+            
+            if not is_normal:
                 ai_cell.fill = purple_fill
                 ai_cell.font = purple_font
                 if row_severity == "Clean" or row_severity == "Slight":
