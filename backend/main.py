@@ -186,90 +186,90 @@ async def process_file_task(task_id: str, contents: bytes, is_csv: bool, is_pdf:
         TASK_STORE[task_id]["message"] = "Connecting to Gemini AI..."
         TASK_STORE[task_id]["progress"] = 40
             
-            api_key = os.getenv("GEMINI_API_KEY")
-            if not api_key:
-                ai_assessments = ["API Key Missing"] * len(df)
-            else:
-                try:
-                    from google import genai
-                    from google.genai import types
+        api_key = os.getenv("GEMINI_API_KEY")
+        if not api_key:
+            ai_assessments = ["API Key Missing"] * len(df)
+        else:
+            try:
+                from google import genai
+                from google.genai import types
+                
+                client = genai.Client(api_key=api_key)
+                desc_col = None
+                amt_col = None
+                for col in df.columns:
+                    if pd.api.types.is_numeric_dtype(df[col]) and amt_col is None:
+                        amt_col = col
+                    if (pd.api.types.is_string_dtype(df[col]) or pd.api.types.is_object_dtype(df[col])) and date_col != col:
+                        desc_col = col
+                
+                if desc_col and amt_col:
+                    batch_data = []
+                    for idx, row in df.iterrows():
+                        batch_data.append({
+                            "id": idx,
+                            "desc": str(row[desc_col]),
+                            "amount": float(row[amt_col]) if not pd.isna(row[amt_col]) else 0.0
+                        })
                     
-                    client = genai.Client(api_key=api_key)
-                    desc_col = None
-                    amt_col = None
-                    for col in df.columns:
-                        if pd.api.types.is_numeric_dtype(df[col]) and amt_col is None:
-                            amt_col = col
-                        if (pd.api.types.is_string_dtype(df[col]) or pd.api.types.is_object_dtype(df[col])) and date_col != col:
-                            desc_col = col
+                    batch_size = 50
+                    chunks = [batch_data[i:i+batch_size] for i in range(0, len(batch_data), batch_size)]
                     
-                    if desc_col and amt_col:
-                        batch_data = []
-                        for idx, row in df.iterrows():
-                            batch_data.append({
-                                "id": idx,
-                                "desc": str(row[desc_col]),
-                                "amount": float(row[amt_col]) if not pd.isna(row[amt_col]) else 0.0
-                            })
-                        
-                        batch_size = 200
-                        chunks = [batch_data[i:i+batch_size] for i in range(0, len(batch_data), batch_size)]
-                        
-                        TASK_STORE[task_id]["message"] = f"AI Analyzing {len(df)} transactions concurrently..."
-                        TASK_STORE[task_id]["progress"] = 50
-                        
-                        # Limit concurrency to 3 to respect rate limits and memory
-                        semaphore = asyncio.Semaphore(3)
-                        
-                        async def process_chunk(chunk):
-                            async with semaphore:
-                                prompt = f"""
-                                You are an expert fraud analyst. Analyze the following list of transactions.
-                                Identify any contextual anomalies. A contextual anomaly is:
-                                1. A transaction where the AMOUNT is highly unusual for the DESCRIPTION (e.g., spending $500 at a 'Candy Shop').
-                                2. A transaction where the DESCRIPTION is nonsensical, a single letter, or obviously fake (e.g., 'a', 'b', 'x', 'test').
-                                
-                                You do NOT need to flag transactions just because the number is large (e.g. $2000 for 'Rent' is normal).
-                                
-                                Return a JSON object mapping the transaction 'id' to a string assessment. 
-                                If it's normal, map it to "Clean".
-                                If it's suspicious, map it to a short explanation like "Fraud: $500 is extremely high for a Candy Shop" or "Fraud: 'a' is a highly suspicious and nonsensical merchant name."
-                                
-                                Transactions:
-                                {json.dumps(chunk)}
-                                """
-                                
-                                for attempt in range(3):
-                                    try:
-                                        # Use the asynchronous client
-                                        response = await client.aio.models.generate_content(
-                                            model='gemini-1.5-flash',
-                                            contents=prompt,
-                                            config=types.GenerateContentConfig(
-                                                response_mime_type="application/json",
-                                            ),
-                                        )
-                                        return json.loads(response.text)
-                                    except Exception as e:
-                                        if "429" in str(e) or attempt < 2:
-                                            await asyncio.sleep(2 ** attempt)
-                                        else:
-                                            # Return the error message so the user sees it in the Excel file instead of silent failure
-                                            return {str(item["id"]): f"AI Error: {str(e)}" for item in chunk}
-                        
-                        tasks = [process_chunk(chunk) for chunk in chunks]
-                        results = await asyncio.gather(*tasks)
-                        
-                        for assessments in results:
-                            for idx_str, text in assessments.items():
-                                idx_int = int(idx_str)
-                                if 0 <= idx_int < len(ai_assessments):
-                                    ai_assessments[idx_int] = text
-                    else:
-                        ai_assessments = ["Missing Amt/Desc Col"] * len(df)
-                except Exception as e:
-                    ai_assessments = [f"AI Error"] * len(df)
+                    TASK_STORE[task_id]["message"] = f"AI Analyzing {len(df)} transactions concurrently..."
+                    TASK_STORE[task_id]["progress"] = 50
                     
+                    # Limit concurrency to 3 to respect rate limits and memory
+                    semaphore = asyncio.Semaphore(3)
+                    
+                    async def process_chunk(chunk):
+                        async with semaphore:
+                            prompt = f"""
+                            You are an expert fraud analyst. Analyze the following list of transactions.
+                            Identify any contextual anomalies. A contextual anomaly is:
+                            1. A transaction where the AMOUNT is highly unusual for the DESCRIPTION (e.g., spending $500 at a 'Candy Shop').
+                            2. A transaction where the DESCRIPTION is nonsensical, a single letter, or obviously fake (e.g., 'a', 'b', 'x', 'test').
+                            
+                            You do NOT need to flag transactions just because the number is large (e.g. $2000 for 'Rent' is normal).
+                            
+                            Return a JSON object mapping the transaction 'id' to a string assessment. 
+                            If it's normal, map it to "Clean".
+                            If it's suspicious, map it to a short explanation like "Fraud: $500 is extremely high for a Candy Shop" or "Fraud: 'a' is a highly suspicious and nonsensical merchant name."
+                            
+                            Transactions:
+                            {json.dumps(chunk)}
+                            """
+                            
+                            for attempt in range(3):
+                                try:
+                                    # Use the asynchronous client
+                                    response = await client.aio.models.generate_content(
+                                        model='gemini-1.5-flash',
+                                        contents=prompt,
+                                        config=types.GenerateContentConfig(
+                                            response_mime_type="application/json",
+                                        ),
+                                    )
+                                    return json.loads(response.text)
+                                except Exception as e:
+                                    if "429" in str(e) or attempt < 2:
+                                        await asyncio.sleep(2 ** attempt)
+                                    else:
+                                        # Return the error message so the user sees it in the Excel file instead of silent failure
+                                        return {str(item["id"]): f"AI Error: {str(e)}" for item in chunk}
+                    
+                    tasks = [process_chunk(chunk) for chunk in chunks]
+                    results = await asyncio.gather(*tasks)
+                    
+                    for assessments in results:
+                        for idx_str, text in assessments.items():
+                            idx_int = int(idx_str)
+                            if 0 <= idx_int < len(ai_assessments):
+                                ai_assessments[idx_int] = text
+                else:
+                    ai_assessments = ["Missing Amt/Desc Col"] * len(df)
+            except Exception as e:
+                ai_assessments = [f"AI Error"] * len(df)
+                
         df['AI Context Assessment'] = ai_assessments
 
         TASK_STORE[task_id]["message"] = "Generating Excel Report..."
