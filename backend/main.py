@@ -14,6 +14,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.get("/")
+async def read_root():
+    return {"message": "Welcome to the Financial Data Parser API! The service is online and active."}
+
 @app.post("/upload")
 async def upload_file(file: UploadFile = File(...)):
     if file.filename and not file.filename.lower().endswith('.csv'):
