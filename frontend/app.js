@@ -65,7 +65,7 @@ document.addEventListener('DOMContentLoaded', () => {
         formData.append('file', file);
 
         try {
-            const response = await fetch('https://financial-data-parser.onrender.com/', {
+            const response = await fetch('https://financial-data-parser.onrender.com/upload', {
                 method: 'POST',
                 body: formData
             });
