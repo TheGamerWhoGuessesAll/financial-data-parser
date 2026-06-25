@@ -6,3 +6,8 @@ python-multipart
 jinja2
 pdfplumber
 google-genai
+sqlalchemy
+psycopg2-binary
+passlib[bcrypt]
+pyjwt
+slowapi
