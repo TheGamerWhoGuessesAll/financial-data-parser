@@ -38,6 +38,43 @@ async def upload_file(
     # Load into pandas DataFrame
     try:
         df = pd.read_csv(io.BytesIO(contents))
+        
+        # Sort by Date if available
+        date_col = None
+        for col in df.columns:
+            if 'date' in str(col).lower() or 'time' in str(col).lower():
+                date_col = col
+                break
+                
+        if date_col:
+            df[date_col] = pd.to_datetime(df[date_col], errors='coerce')
+            df = df.sort_values(by=date_col).reset_index(drop=True)
+            df[date_col] = df[date_col].dt.strftime('%Y-%m-%d %H:%M:%S').fillna(df[date_col])
+            
+        # Rapid Succession Detection (3 or more consecutive within 5%)
+        rapid_warnings = 0
+        for col in df.columns:
+            if pd.api.types.is_numeric_dtype(df[col]):
+                vals = df[col].values
+                streak = 1
+                for i in range(1, len(vals)):
+                    prev = vals[i-1]
+                    curr = vals[i]
+                    if pd.isna(prev) or pd.isna(curr) or prev == 0:
+                        if streak >= 3:
+                            rapid_warnings += 1
+                        streak = 1
+                        continue
+                    diff_pct = abs(curr - prev) / abs(prev)
+                    if diff_pct <= 0.05:
+                        streak += 1
+                    else:
+                        if streak >= 3:
+                            rapid_warnings += 1
+                        streak = 1
+                if streak >= 3:
+                    rapid_warnings += 1
+
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Error parsing CSV file: {str(e)}")
     
@@ -86,15 +123,13 @@ async def upload_file(
                 median = abs_data.median()
                 mean = abs_data.mean()
                 
-                # Use Q10 as the robust baseline to anchor to the "typical small transaction".
-                # If Q10 is 0, fallback to Median -> Mean -> 1.0 to prevent division by zero.
-                base_val = q10
+                # Dynamic floor based on the median to prevent micro-transactions from burying normal purchases.
+                # The vast majority of purchases center around the median, so we use 25% of the median as a robust floor.
+                dynamic_floor = median * 0.25 if median > 0 else 1.0
+                base_val = max(q10, dynamic_floor)
+                
                 if base_val == 0:
-                    base_val = median
-                if base_val == 0:
-                    base_val = mean
-                if base_val == 0:
-                    base_val = 1.0
+                    base_val = mean if mean > 0 else 1.0
                     
                 stats[idx + 1] = {
                     'base_val': base_val
@@ -175,32 +210,38 @@ async def upload_file(
         dashboard['A5'] = "Suspicious Rate:"
         dashboard['B5'] = f"{pct_anomalies:.1f}%"
         
-        for r in range(3, 6):
+        dashboard['A6'] = "Rapid Successions (Warnings):"
+        dashboard['B6'] = rapid_warnings
+
+        for r in range(3, 7):
             dashboard[f'A{r}'].font = Font(bold=True)
             dashboard[f'B{r}'].alignment = Alignment(horizontal='left')
             if r in [4, 5]:
                 color = "FF990000" if total_anomalies > 0 else "FF006100"
                 dashboard[f'B{r}'].font = Font(bold=True, color=color)
+            elif r == 6:
+                color = "FF9C0006" if rapid_warnings > 0 else "FF006100"
+                dashboard[f'B{r}'].font = Font(bold=True, color=color)
             else:
                 dashboard[f'B{r}'].font = Font(bold=True)
                 
         # 6. Breakdown Table Formatting
-        dashboard['A8'] = "Anomaly Type"
-        dashboard['B8'] = "Count"
-        dashboard['C8'] = "% of Total"
-        dashboard['D8'] = "% of Anomalies"
+        dashboard['A9'] = "Anomaly Type"
+        dashboard['B9'] = "Count"
+        dashboard['C9'] = "% of Total"
+        dashboard['D9'] = "% of Anomalies"
         
         thin_border = Border(left=Side(style='thin'), right=Side(style='thin'), top=Side(style='thin'), bottom=Side(style='thin'))
         
         for col in ['A', 'B', 'C', 'D']:
-            dashboard[f'{col}8'].font = Font(bold=True, color="FFFFFFFF")
-            dashboard[f'{col}8'].fill = PatternFill(start_color="FF2F5597", end_color="FF2F5597", fill_type="solid")
-            dashboard[f'{col}8'].alignment = Alignment(horizontal="center", vertical="center")
-            dashboard[f'{col}8'].border = thin_border
+            dashboard[f'{col}9'].font = Font(bold=True, color="FFFFFFFF")
+            dashboard[f'{col}9'].fill = PatternFill(start_color="FF2F5597", end_color="FF2F5597", fill_type="solid")
+            dashboard[f'{col}9'].alignment = Alignment(horizontal="center", vertical="center")
+            dashboard[f'{col}9'].border = thin_border
             
         categories = ["Severe", "Suspicious", "Slight", "Text", "Clean"]
         for i, cat in enumerate(categories):
-            row = 9 + i
+            row = 10 + i
             count = severity_counts[cat]
             pct_total = (count / total_rows) if total_rows > 0 else 0
             pct_anom = (count / total_anomalies) if (total_anomalies > 0 and cat != "Clean") else 0
@@ -227,8 +268,8 @@ async def upload_file(
         # Chart 1: Whole Dataset
         pie1 = PieChart3D()
         pie1.title = "Dataset Breakdown (Whole Set)"
-        labels1 = Reference(dashboard, min_col=1, min_row=9, max_row=13)
-        data1 = Reference(dashboard, min_col=2, min_row=8, max_row=13)
+        labels1 = Reference(dashboard, min_col=1, min_row=10, max_row=14)
+        data1 = Reference(dashboard, min_col=2, min_row=9, max_row=14)
         pie1.add_data(data1, titles_from_data=True)
         pie1.set_categories(labels1)
         pie1.dataLabels = DataLabelList()
@@ -245,8 +286,8 @@ async def upload_file(
         if total_anomalies > 0:
             pie2 = PieChart3D()
             pie2.title = "Anomaly Distribution (Anomalies Only)"
-            labels2 = Reference(dashboard, min_col=1, min_row=9, max_row=12) # Exclude Clean
-            data2 = Reference(dashboard, min_col=2, min_row=8, max_row=12)
+            labels2 = Reference(dashboard, min_col=1, min_row=10, max_row=13) # Exclude Clean
+            data2 = Reference(dashboard, min_col=2, min_row=9, max_row=13)
             pie2.add_data(data2, titles_from_data=True)
             pie2.set_categories(labels2)
             pie2.dataLabels = DataLabelList()
