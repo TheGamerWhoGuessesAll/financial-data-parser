@@ -5,8 +5,9 @@ from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 import openpyxl
 from openpyxl.utils import get_column_letter
-from openpyxl.styles import PatternFill, Font, Alignment
+from openpyxl.styles import PatternFill, Font, Alignment, Border, Side
 from openpyxl.chart import PieChart3D, Reference
+from openpyxl.chart.label import DataLabelList
 
 app = FastAPI(title="Financial Data Parser")
 
@@ -31,8 +32,10 @@ async def upload_file(
     if file.filename and not file.filename.lower().endswith('.csv'):
         raise HTTPException(status_code=400, detail="Only .csv files are supported")
 
+    # Read the uploaded CSV file
     contents = await file.read()
     
+    # Load into pandas DataFrame
     try:
         df = pd.read_csv(io.BytesIO(contents))
     except Exception as e:
@@ -40,6 +43,7 @@ async def upload_file(
     
     user_keywords = [k.strip().lower() for k in keywords.split(',') if k.strip()]
 
+    # Create an in-memory buffer for the Excel file
     buffer = io.BytesIO()
 
     # Opaque ARGB formatting for heatmaps
@@ -59,26 +63,41 @@ async def upload_file(
         df.to_excel(writer, index=False, sheet_name='Anomaly Report')
         worksheet = writer.sheets['Anomaly Report']
         
-        # Premium Features: Freeze Top Row & Add AutoFilter
+        # 1. Premium Features: Freeze Top Row & Add AutoFilter
         worksheet.freeze_panes = "A2"
         max_col_letter = get_column_letter(len(df.columns))
         max_row = len(df) + 1
         worksheet.auto_filter.ref = f"A1:{max_col_letter}{max_row}"
         
-        # Auto-adjust column widths
+        # 2. Auto-adjust column widths
         for idx, col in enumerate(df.columns):
             max_len = max(df[col].astype(str).map(len).max(), len(str(col))) + 2
             worksheet.column_dimensions[get_column_letter(idx + 1)].width = min(max_len, 50)
             
-        # Find which columns are numeric vs text and compute robust median
+        # 3. Find which columns are numeric vs text and compute robust baseline
         numeric_cols = []
         text_cols = []
         stats = {}
         for idx, col in enumerate(df.columns):
             if pd.api.types.is_numeric_dtype(df[col]):
                 numeric_cols.append(idx + 1)
+                abs_data = df[col].abs()
+                q25 = abs_data.quantile(0.25)
+                median = abs_data.median()
+                mean = abs_data.mean()
+                
+                # Use Q1 as the robust baseline to catch large anomalies even if there are many of them.
+                # If Q1 is 0, fallback to Median -> Mean -> 1.0 to prevent division by zero.
+                base_val = q25
+                if base_val == 0:
+                    base_val = median
+                if base_val == 0:
+                    base_val = mean
+                if base_val == 0:
+                    base_val = 1.0
+                    
                 stats[idx + 1] = {
-                    'median': df[col].median()
+                    'base_val': base_val
                 }
             elif pd.api.types.is_string_dtype(df[col]) or pd.api.types.is_object_dtype(df[col]):
                 text_cols.append(idx + 1)
@@ -92,7 +111,7 @@ async def upload_file(
             "Clean": 0
         }
 
-        # Apply Heatmap background colors using robust median stats
+        # 4. Apply Heatmap background colors
         for row in range(2, len(df) + 2):
             row_severity = "Clean"
             
@@ -110,8 +129,7 @@ async def upload_file(
                 cell = worksheet.cell(row=row, column=col_idx)
                 val = cell.value
                 if val is not None and isinstance(val, (int, float)):
-                    median = stats[col_idx]['median']
-                    base_val = abs(median) if median != 0 else 1.0
+                    base_val = stats[col_idx]['base_val']
                     ratio = abs(val) / base_val
                     
                     if ratio >= 5.0:
@@ -131,7 +149,7 @@ async def upload_file(
                             
             severity_counts[row_severity] += 1
 
-        # Create Summary Dashboard Sheet
+        # 5. Create Summary Dashboard Sheet
         dashboard = writer.book.create_sheet("Summary Dashboard", 0)
         dashboard.sheet_view.showGridLines = False
         
@@ -166,16 +184,19 @@ async def upload_file(
             else:
                 dashboard[f'B{r}'].font = Font(bold=True)
                 
-        # Breakdown Table
+        # 6. Breakdown Table Formatting
         dashboard['A8'] = "Anomaly Type"
         dashboard['B8'] = "Count"
         dashboard['C8'] = "% of Total"
         dashboard['D8'] = "% of Anomalies"
         
+        thin_border = Border(left=Side(style='thin'), right=Side(style='thin'), top=Side(style='thin'), bottom=Side(style='thin'))
+        
         for col in ['A', 'B', 'C', 'D']:
             dashboard[f'{col}8'].font = Font(bold=True, color="FFFFFFFF")
             dashboard[f'{col}8'].fill = PatternFill(start_color="FF2F5597", end_color="FF2F5597", fill_type="solid")
-            dashboard[f'{col}8'].alignment = Alignment(horizontal="center")
+            dashboard[f'{col}8'].alignment = Alignment(horizontal="center", vertical="center")
+            dashboard[f'{col}8'].border = thin_border
             
         categories = ["Severe", "Suspicious", "Slight", "Text", "Clean"]
         for i, cat in enumerate(categories):
@@ -195,17 +216,30 @@ async def upload_file(
                 dashboard[f'D{row}'] = pct_anom
                 dashboard[f'D{row}'].number_format = '0.0%'
                 
-        # Add Dual 3D Pie Charts
+            # Apply borders and alignment
+            for col in ['A', 'B', 'C', 'D']:
+                cell = dashboard[f'{col}{row}']
+                cell.border = thin_border
+                if col in ['B', 'C', 'D']:
+                    cell.alignment = Alignment(horizontal="center")
+                
+        # 7. Add Pie Charts
+        # Chart 1: Whole Dataset
         pie1 = PieChart3D()
         pie1.title = "Dataset Breakdown (Whole Set)"
         labels1 = Reference(dashboard, min_col=1, min_row=9, max_row=13)
         data1 = Reference(dashboard, min_col=2, min_row=8, max_row=13)
         pie1.add_data(data1, titles_from_data=True)
         pie1.set_categories(labels1)
+        pie1.dataLabels = DataLabelList()
+        pie1.dataLabels.showCatName = True
+        pie1.dataLabels.showPercent = True
+        pie1.legend = None
         pie1.width = 12
         pie1.height = 8
         dashboard.add_chart(pie1, "F2")
         
+        # Chart 2: Anomaly Distribution (Only if anomalies exist)
         if total_anomalies > 0:
             pie2 = PieChart3D()
             pie2.title = "Anomaly Distribution (Anomalies Only)"
@@ -213,6 +247,10 @@ async def upload_file(
             data2 = Reference(dashboard, min_col=2, min_row=8, max_row=12)
             pie2.add_data(data2, titles_from_data=True)
             pie2.set_categories(labels2)
+            pie2.dataLabels = DataLabelList()
+            pie2.dataLabels.showCatName = True
+            pie2.dataLabels.showPercent = True
+            pie2.legend = None
             pie2.width = 12
             pie2.height = 8
             dashboard.add_chart(pie2, "F17")
@@ -220,12 +258,15 @@ async def upload_file(
         # Set Dashboard as the active sheet when opened
         writer.book.active = 0
         
+    # Reset buffer position to the beginning before returning
     buffer.seek(0)
     
+    # Generate the new filename (replace extension with .xlsx)
     original_filename = file.filename or "data.csv"
     base_name = original_filename.rsplit('.', 1)[0]
     excel_filename = f"{base_name}_anomalies.xlsx"
     
+    # Return as a downloadable Excel file
     return StreamingResponse(
         buffer,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
