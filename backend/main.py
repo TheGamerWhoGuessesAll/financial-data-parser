@@ -255,7 +255,11 @@ async def process_file_task(task_id: str, contents: bytes, is_csv: bool, is_pdf:
                                         await asyncio.sleep(2 ** attempt)
                                     else:
                                         # Return the error message so the user sees it in the Excel file instead of silent failure
-                                        return {str(item["id"]): f"AI Error: {str(e)}" for item in chunk}
+                                        # The 'google.genai.errors.APIError' overrides str() poorly sometimes, so we extract the actual message if possible
+                                        err_msg = str(e)
+                                        if hasattr(e, 'message'):
+                                            err_msg = e.message
+                                        return {str(item["id"]): f"AI Error: {err_msg}" for item in chunk}
                     
                     tasks = [process_chunk(chunk) for chunk in chunks]
                     results = await asyncio.gather(*tasks)
@@ -268,7 +272,10 @@ async def process_file_task(task_id: str, contents: bytes, is_csv: bool, is_pdf:
                 else:
                     ai_assessments = ["Missing Amt/Desc Col"] * len(df)
             except Exception as e:
-                ai_assessments = [f"AI Error"] * len(df)
+                err_msg = str(e)
+                if hasattr(e, 'message'):
+                    err_msg = e.message
+                ai_assessments = [f"AI Error (Outer): {type(e).__name__} - {err_msg}"] * len(df)
                 
         df['AI Context Assessment'] = ai_assessments
 
