@@ -63,6 +63,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const formData = new FormData();
         formData.append('file', file);
+        
+        // --- NEW FEATURE: Read keywords and send to backend ---
+        const keywordsInput = document.getElementById('keywords');
+        if (keywordsInput) {
+            formData.append('keywords', keywordsInput.value);
+        }
+        // ------------------------------------------------------
 
         try {
             const response = await fetch('https://financial-data-parser.onrender.com/upload', {
