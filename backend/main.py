@@ -142,19 +142,27 @@ async def upload_file(
                 numeric_cols.append(idx + 1)
                 abs_data = df[col].abs()
                 
-                # Find the minimum valid transaction to anchor the baseline
-                min_val = abs_data[abs_data > 0].min() if not abs_data[abs_data > 0].empty else 0
-                median = abs_data.median()
-                mean = abs_data.mean()
+                valid_data = abs_data[abs_data > 0]
                 
-                # Advanced Dynamic Baseline (Handles Extreme Skew & Small Datasets):
-                # We anchor to the lowest valid transaction, but add a dynamic buffer 
-                # scaling with the median (10%). This fulfills the requirement to use the 
-                # dataset's center (median) to dynamically adjust the floor without fixed numbers.
-                base_val = min_val + (median * 0.10)
+                # Robust Statistical Baseline (Focus on Large Datasets):
+                # Uses Tukey's Fences (Q3 + 1.5 * IQR) to establish the upper bound 
+                # of "Normal Variation" across the dataset's middle 50% spread.
+                if len(valid_data) >= 4:
+                    q1 = valid_data.quantile(0.25)
+                    q3 = valid_data.quantile(0.75)
+                    iqr = q3 - q1
+                    
+                    # Prevent zero IQR from collapsing the baseline if many values are identical
+                    if iqr == 0:
+                        iqr = valid_data.mean() * 0.10
+                        
+                    base_val = q3 + (1.5 * iqr)
+                else:
+                    # Fallback for very small datasets
+                    base_val = valid_data.median() + (valid_data.mean() * 0.50) if not valid_data.empty else 1.0
                 
-                if base_val == 0:
-                    base_val = mean if mean > 0 else 1.0
+                if pd.isna(base_val) or base_val <= 0:
+                    base_val = valid_data.mean() if not valid_data.empty and valid_data.mean() > 0 else 1.0
                     
                 stats[idx + 1] = {
                     'base_val': base_val
