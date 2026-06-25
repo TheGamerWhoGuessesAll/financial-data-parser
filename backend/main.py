@@ -164,12 +164,15 @@ async def upload_file(
                         chunk = batch_data[i:i+batch_size]
                         prompt = f"""
                         You are an expert fraud analyst. Analyze the following list of transactions.
-                        Identify any contextual anomalies. A contextual anomaly is a transaction where the AMOUNT is highly unusual for the DESCRIPTION (e.g., spending $500 at a 'Candy Shop'). 
+                        Identify any contextual anomalies. A contextual anomaly is:
+                        1. A transaction where the AMOUNT is highly unusual for the DESCRIPTION (e.g., spending $500 at a 'Candy Shop').
+                        2. A transaction where the DESCRIPTION is nonsensical, a single letter, or obviously fake (e.g., 'a', 'b', 'x', 'test').
+                        
                         You do NOT need to flag transactions just because the number is large (e.g. $2000 for 'Rent' is normal).
                         
                         Return a JSON object mapping the transaction 'id' to a string assessment. 
                         If it's normal, map it to "Clean".
-                        If it's suspicious, map it to a short explanation like "Fraud: $500 is extremely high for a Candy Shop."
+                        If it's suspicious, map it to a short explanation like "Fraud: $500 is extremely high for a Candy Shop" or "Fraud: 'a' is a highly suspicious and nonsensical merchant name."
                         
                         Transactions:
                         {json.dumps(chunk)}
