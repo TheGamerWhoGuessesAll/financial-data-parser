@@ -230,6 +230,10 @@ async def upload_file(
         title_cell.value = "Financial Anomaly Dashboard"
         title_cell.font = Font(size=18, bold=True, color="FF2F5597")
         
+        warning_cell = dashboard['C1']
+        warning_cell.value = "(Note: May be inaccurate for small datasets)"
+        warning_cell.font = Font(size=10, italic=True, color="FFFF0000")
+        
         total_rows = len(df)
         total_anomalies = total_rows - severity_counts["Clean"]
         pct_anomalies = (total_anomalies / total_rows) * 100 if total_rows > 0 else 0
