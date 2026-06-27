@@ -11,7 +11,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from datetime import datetime, timedelta
 from pydantic import BaseModel
-from sqlalchemy import create_engine, Column, Integer, String, DateTime
+from sqlalchemy import create_engine, Column, Integer, String, DateTime, text
 from sqlalchemy.orm import declarative_base, sessionmaker, Session
 from passlib.context import CryptContext
 import jwt
@@ -28,6 +28,27 @@ from openpyxl.chart import PieChart3D, Reference
 from openpyxl.chart.label import DataLabelList
 
 app = FastAPI(title="Financial Data Parser")
+
+@app.on_event("startup")
+def startup_event():
+    # Attempt to migrate the database by safely adding the new columns if they are missing
+    try:
+        with engine.connect() as conn:
+            try:
+                conn.execute(text("ALTER TABLE users ADD COLUMN failed_login_attempts INTEGER DEFAULT 0"))
+            except Exception:
+                pass
+            try:
+                conn.execute(text("ALTER TABLE users ADD COLUMN locked_until DATETIME"))
+            except Exception:
+                pass
+            try:
+                conn.execute(text("ALTER TABLE users ADD COLUMN lockout_count INTEGER DEFAULT 0"))
+            except Exception:
+                pass
+            conn.commit()
+    except Exception as e:
+        print(f"Migration error: {e}")
 
 app.add_middleware(
     CORSMiddleware,
