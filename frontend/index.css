@@ -350,3 +350,20 @@ body {
 .status.success { color: #10b981; }
 .status.loading { color: var(--primary); animation: pulse 1.5s infinite; }
 @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+
+/* Auth Page Styles */
+.auth-box {
+    background: var(--bg-dark);
+    border-radius: 12px;
+    padding: 40px;
+    border: 1px solid #333;
+    box-shadow: 0 20px 40px rgba(0,0,0,0.5);
+    width: 100%;
+    max-width: 400px;
+}
+.auth-box h2 {
+    margin-top: 0;
+    margin-bottom: 10px;
+    text-align: center;
+    color: white;
+}
