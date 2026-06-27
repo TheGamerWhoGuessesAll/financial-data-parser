@@ -31,22 +31,11 @@ app = FastAPI(title="Financial Data Parser")
 
 @app.on_event("startup")
 def startup_event():
-    # Attempt to migrate the database by safely adding the new columns if they are missing
+    # Automatically wipe and recreate the database to fix the corrupted schema on Render
     try:
-        with engine.connect() as conn:
-            try:
-                conn.execute(text("ALTER TABLE users ADD COLUMN failed_login_attempts INTEGER DEFAULT 0"))
-            except Exception:
-                pass
-            try:
-                conn.execute(text("ALTER TABLE users ADD COLUMN locked_until DATETIME"))
-            except Exception:
-                pass
-            try:
-                conn.execute(text("ALTER TABLE users ADD COLUMN lockout_count INTEGER DEFAULT 0"))
-            except Exception:
-                pass
-            conn.commit()
+        Base.metadata.drop_all(bind=engine)
+        Base.metadata.create_all(bind=engine)
+        print("Database automatically reset!")
     except Exception as e:
         print(f"Migration error: {e}")
 
@@ -712,14 +701,14 @@ async def process_file_task(task_id: str, contents: bytes, is_csv: bool, is_pdf:
         TASK_STORE[task_id]["message"] = f"Error: {str(e)}"
 
 
-import os
-if os.path.exists("frontend"):
-    app.mount("/", StaticFiles(directory="frontend", html=True), name="frontend")
-elif os.path.exists("../frontend"):
-    app.mount("/", StaticFiles(directory="../frontend", html=True), name="frontend")
-
 @app.get("/reset_db")
 def reset_db():
     Base.metadata.drop_all(bind=engine)
     Base.metadata.create_all(bind=engine)
     return {"status": "Database has been completely reset to the new schema!"}
+
+import os
+if os.path.exists("frontend"):
+    app.mount("/", StaticFiles(directory="frontend", html=True), name="frontend")
+elif os.path.exists("../frontend"):
+    app.mount("/", StaticFiles(directory="../frontend", html=True), name="frontend")
