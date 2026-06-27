@@ -718,5 +718,8 @@ if os.path.exists("frontend"):
 elif os.path.exists("../frontend"):
     app.mount("/", StaticFiles(directory="../frontend", html=True), name="frontend")
 
-
-@app.get(" /reset_db\)
+@app.get("/reset_db")
+def reset_db():
+    Base.metadata.drop_all(bind=engine)
+    Base.metadata.create_all(bind=engine)
+    return {"status": "Database has been completely reset to the new schema!"}
