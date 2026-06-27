@@ -1,240 +1,238 @@
+
+const baseUrl = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' 
+    ? 'http://127.0.0.1:8000' 
+    : 'https://financial-data-parser.onrender.com';
+
 document.addEventListener('DOMContentLoaded', () => {
+    // DOM Elements
     const authOverlay = document.getElementById('authOverlay');
+    const landingPage = document.getElementById('landingPage');
     const mainApp = document.getElementById('mainApp');
+    const cookieOverlay = document.getElementById('cookieOverlay');
+    
     const loginBtn = document.getElementById('loginBtn');
     const signupBtn = document.getElementById('signupBtn');
+    const closeAuthBtn = document.getElementById('closeAuthBtn');
     const logoutBtn = document.getElementById('logoutBtn');
-    const authEmail = document.getElementById('authEmail');
-    const authPassword = document.getElementById('authPassword');
-    const authStatus = document.getElementById('authStatus');
-
-    const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.protocol === 'file:';
-    const baseUrl = isLocalhost 
-        ? 'http://127.0.0.1:8000' 
-        : 'https://financial-data-parser.onrender.com';
-
-    function checkAuth() {
-        const token = localStorage.getItem('token');
-        if (token) {
-            authOverlay.style.display = 'none';
-            mainApp.style.display = 'block';
-            logoutBtn.style.display = 'block';
-        } else {
-            authOverlay.style.display = 'flex';
-            mainApp.style.display = 'none';
-            logoutBtn.style.display = 'none';
-        }
+    
+    const navLoginBtn = document.getElementById('navLoginBtn');
+    const navSignupBtn = document.getElementById('navSignupBtn');
+    
+    const acceptCookiesBtn = document.getElementById('acceptCookiesBtn');
+    const manageCookiesBtn = document.getElementById('manageCookiesBtn');
+    const promoBanner = document.getElementById('promoBanner');
+    const closeBanner = document.getElementById('closeBanner');
+    
+    // Cookie Popup logic
+    if (localStorage.getItem('cookiesAccepted') === 'true') {
+        cookieOverlay.style.display = 'none';
+    }
+    
+    const dismissCookies = () => {
+        cookieOverlay.style.display = 'none';
+        localStorage.setItem('cookiesAccepted', 'true');
+    };
+    
+    acceptCookiesBtn.addEventListener('click', dismissCookies);
+    manageCookiesBtn.addEventListener('click', dismissCookies);
+    
+    if (closeBanner) {
+        closeBanner.addEventListener('click', () => {
+            promoBanner.style.display = 'none';
+        });
     }
 
-    async function handleAuth(endpoint) {
-        const email = authEmail.value;
-        const password = authPassword.value;
+    // Check auth status
+    const token = localStorage.getItem('access_token');
+    if (token) {
+        landingPage.style.display = 'none';
+        mainApp.style.display = 'block';
+    }
+
+    // Show Auth Modal
+    const showAuth = () => {
+        authOverlay.style.display = 'flex';
+    };
+    
+    const hideAuth = () => {
+        authOverlay.style.display = 'none';
+    };
+
+    if (navLoginBtn) navLoginBtn.addEventListener('click', showAuth);
+    if (navSignupBtn) navSignupBtn.addEventListener('click', showAuth);
+    if (closeAuthBtn) closeAuthBtn.addEventListener('click', hideAuth);
+
+    // Auth Actions
+    const handleAuth = async (endpoint) => {
+        const email = document.getElementById('authEmail').value;
+        const password = document.getElementById('authPassword').value;
+        const authStatus = document.getElementById('authStatus');
+
         if (!email || !password) {
-            authStatus.innerText = 'Email and password are required.';
+            authStatus.innerText = 'Please enter email and password';
             return;
         }
-        
-        authStatus.innerText = 'Please wait...';
+
+        authStatus.innerText = 'Connecting...';
+
         try {
             const response = await fetch(`${baseUrl}/${endpoint}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ email, password })
             });
+
             const data = await response.json();
-            
+
             if (response.ok) {
-                localStorage.setItem('token', data.access_token);
-                authStatus.innerText = '';
-                authEmail.value = '';
-                authPassword.value = '';
-                checkAuth();
+                localStorage.setItem('access_token', data.access_token);
+                authOverlay.style.display = 'none';
+                landingPage.style.display = 'none';
+                mainApp.style.display = 'block';
             } else {
                 authStatus.innerText = data.detail || 'Authentication failed.';
             }
         } catch (e) {
             authStatus.innerText = 'Network error. Please try again.';
         }
-    }
+    };
 
     loginBtn.addEventListener('click', () => handleAuth('login'));
     signupBtn.addEventListener('click', () => handleAuth('signup'));
-    
+
     logoutBtn.addEventListener('click', () => {
-        localStorage.removeItem('token');
-        checkAuth();
+        localStorage.removeItem('access_token');
+        mainApp.style.display = 'none';
+        landingPage.style.display = 'block';
     });
 
-    checkAuth();
-
+    // App Logic (Drag & Drop, Upload)
     const dropzone = document.getElementById('dropzone');
     const fileInput = document.getElementById('fileInput');
-    const statusEl = document.getElementById('status');
+    const statusDiv = document.getElementById('status');
     const progressContainer = document.getElementById('progressContainer');
     const progressBar = document.getElementById('progressBar');
     const progressText = document.getElementById('progressText');
     const progressPercent = document.getElementById('progressPercent');
 
-    // Prevent default drag behaviors
-    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
-        dropzone.addEventListener(eventName, preventDefaults, false);
-        document.body.addEventListener(eventName, preventDefaults, false);
-    });
+    dropzone.addEventListener('click', () => fileInput.click());
 
-    function preventDefaults(e) {
+    dropzone.addEventListener('dragover', (e) => {
         e.preventDefault();
-        e.stopPropagation();
-    }
-
-    // Highlight dropzone when item is dragged over it
-    ['dragenter', 'dragover'].forEach(eventName => {
-        dropzone.addEventListener(eventName, highlight, false);
-    });
-
-    ['dragleave', 'drop'].forEach(eventName => {
-        dropzone.addEventListener(eventName, unhighlight, false);
-    });
-
-    function highlight() {
         dropzone.classList.add('dragover');
-    }
+    });
 
-    function unhighlight() {
+    dropzone.addEventListener('dragleave', () => {
         dropzone.classList.remove('dragover');
-    }
-
-    // Handle dropped files
-    dropzone.addEventListener('drop', handleDrop, false);
-
-    function handleDrop(e) {
-        const dt = e.dataTransfer;
-        const files = dt.files;
-        if (files.length > 0) {
-            handleFiles(files[0]);
-        }
-    }
-
-    // Handle click to upload
-    dropzone.addEventListener('click', () => {
-        fileInput.click();
     });
 
-    fileInput.addEventListener('change', function() {
-        if (this.files.length > 0) {
-            handleFiles(this.files[0]);
+    dropzone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        dropzone.classList.remove('dragover');
+        if (e.dataTransfer.files.length) {
+            handleFile(e.dataTransfer.files[0]);
         }
     });
 
-    function setStatus(message, type) {
-        statusEl.textContent = message;
-        statusEl.className = 'status ' + type;
-    }
+    fileInput.addEventListener('change', (e) => {
+        if (e.target.files.length) {
+            handleFile(e.target.files[0]);
+        }
+    });
 
-    function updateProgress(percent, message) {
-        progressContainer.style.display = 'block';
-        progressBar.style.width = percent + '%';
-        progressText.textContent = message;
-        progressPercent.textContent = percent + '%';
-    }
+    let currentTaskId = null;
+    let pollInterval = null;
 
-    async function handleFiles(file) {
-        setStatus('', '');
-        updateProgress(0, 'Uploading file...');
+    async function handleFile(file) {
+        const token = localStorage.getItem('access_token');
+        if (!token) {
+            showAuth();
+            return;
+        }
 
         const formData = new FormData();
         formData.append('file', file);
-        
-        const keywords = document.getElementById('keywords').value;
-        formData.append('keywords', keywords);
+        formData.append('keywords', document.getElementById('keywords').value);
 
-
+        statusDiv.className = 'status loading';
+        statusDiv.innerText = 'Uploading file...';
+        progressContainer.style.display = 'none';
 
         try {
-            // Step 1: Upload file and get task_id
-            const token = localStorage.getItem('token');
-            const uploadResponse = await fetch(`${baseUrl}/upload`, {
+            const response = await fetch(`${baseUrl}/upload`, {
                 method: 'POST',
-                headers: { 'Authorization': `Bearer ${token}` },
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                },
                 body: formData
             });
-            if (uploadResponse.status === 401) {
-                localStorage.removeItem('token');
-                checkAuth();
-                throw new Error("Session expired. Please login again.");
+
+            if (response.status === 401) {
+                localStorage.removeItem('access_token');
+                mainApp.style.display = 'none';
+                landingPage.style.display = 'block';
+                showAuth();
+                return;
             }
 
-            if (!uploadResponse.ok) {
-                throw new Error(`Server error: ${uploadResponse.status}`);
+            const data = await response.json();
+            if (response.ok) {
+                currentTaskId = data.task_id;
+                statusDiv.innerText = 'Processing started...';
+                progressContainer.style.display = 'block';
+                pollStatus();
+            } else {
+                statusDiv.className = 'status error';
+                statusDiv.innerText = data.detail || 'An error occurred';
             }
-
-            const data = await uploadResponse.json();
-            const taskId = data.task_id;
-
-            // Step 2: Poll for status
-            let completed = false;
-            while (!completed) {
-                await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second
-                
-                const token = localStorage.getItem('token');
-                const statusResponse = await fetch(`${baseUrl}/status/${taskId}`, {
-                    headers: { 'Authorization': `Bearer ${token}` }
-                });
-                if (!statusResponse.ok) continue;
-
-                const statusData = await statusResponse.json();
-                updateProgress(statusData.progress, statusData.message);
-
-                if (statusData.status === 'completed') {
-                    completed = true;
-                } else if (statusData.status === 'error') {
-                    throw new Error(statusData.message || "An error occurred during processing.");
-                }
-            }
-
-            // Step 3: Download the file
-            updateProgress(100, 'Downloading report...');
-            const downloadResponse = await fetch(`${baseUrl}/download/${taskId}`, {
-                headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
-            });
-            
-            if (!downloadResponse.ok) throw new Error("Failed to download result.");
-
-            const blob = await downloadResponse.blob();
-            const url = window.URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.style.display = 'none';
-            a.href = url;
-            
-            let filename = 'processed_financial_data.xlsx';
-            const disposition = downloadResponse.headers.get('Content-Disposition');
-            if (disposition && disposition.indexOf('attachment') !== -1) {
-                const filenameRegex = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/;
-                const matches = filenameRegex.exec(disposition);
-                if (matches != null && matches[1]) { 
-                     filename = matches[1].replace(/['"]/g, '');
-                }
-            }
-
-            a.download = filename;
-            document.body.appendChild(a);
-            a.click();
-            
-            window.URL.revokeObjectURL(url);
-            document.body.removeChild(a);
-
-            setStatus('File processed and downloaded successfully!', 'success');
-            
-            setTimeout(() => {
-                progressContainer.style.display = 'none';
-                statusEl.textContent = '';
-                statusEl.className = 'status';
-                fileInput.value = '';
-            }, 3000);
-
         } catch (error) {
-            console.error('Upload error:', error);
-            progressContainer.style.display = 'none';
-            setStatus(error.message || 'Error processing file. Ensure backend is running.', 'error');
+            statusDiv.className = 'status error';
+            statusDiv.innerText = 'Failed to connect to server';
         }
+    }
+
+    async function pollStatus() {
+        if (pollInterval) clearInterval(pollInterval);
+        
+        pollInterval = setInterval(async () => {
+            if (!currentTaskId) return;
+            
+            try {
+                const token = localStorage.getItem('access_token');
+                const response = await fetch(`${baseUrl}/status/${currentTaskId}`, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+                const data = await response.json();
+                
+                if (response.ok) {
+                    progressBar.style.width = `${data.progress}%`;
+                    progressPercent.innerText = `${data.progress}%`;
+                    progressText.innerText = data.message;
+                    
+                    if (data.status === 'completed') {
+                        clearInterval(pollInterval);
+                        statusDiv.className = 'status success';
+                        statusDiv.innerText = 'Processing complete!';
+                        
+                        setTimeout(() => {
+                            const link = document.createElement('a');
+                            link.href = `${baseUrl}/download/${currentTaskId}?token=${token}`;
+                            link.style.display = 'none';
+                            document.body.appendChild(link);
+                            link.click();
+                            document.body.removeChild(link);
+                        }, 1000);
+                    } else if (data.status === 'error') {
+                        clearInterval(pollInterval);
+                        statusDiv.className = 'status error';
+                        statusDiv.innerText = 'Error: ' + data.message;
+                    }
+                }
+            } catch (error) {
+                console.error("Polling error", error);
+            }
+        }, 1500);
     }
 });
