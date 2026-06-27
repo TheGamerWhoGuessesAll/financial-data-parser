@@ -356,7 +356,7 @@ async def process_file_task(task_id: str, contents: bytes, is_csv: bool, is_pdf:
                                 try:
                                     # Use the asynchronous client
                                     response = await client.aio.models.generate_content(
-                                        model='gemini-1.5-flash-8b',
+                                        model='gemini-2.5-flash',
                                         contents=prompt,
                                         config=types.GenerateContentConfig(
                                             response_mime_type="application/json",
