@@ -326,14 +326,17 @@ async def process_file_task(task_id: str, contents: bytes, is_csv: bool, is_pdf:
                     
                     batch_size = 50
                     chunks = [batch_data[i:i+batch_size] for i in range(0, len(batch_data), batch_size)]
+                    total_chunks = len(chunks)
+                    chunks_completed = 0
                     
-                    TASK_STORE[task_id]["message"] = f"AI Analyzing {len(df)} transactions concurrently..."
+                    TASK_STORE[task_id]["message"] = f"AI Analyzing {len(df)} transactions..."
                     TASK_STORE[task_id]["progress"] = 50
                     
                     # Limit concurrency to 1 to completely avoid Free Tier burst rate limits
                     semaphore = asyncio.Semaphore(1)
                     
                     async def process_chunk(chunk):
+                        nonlocal chunks_completed
                         async with semaphore:
                             prompt = f"""
                             You are an expert fraud analyst. Analyze the following list of transactions.
@@ -371,6 +374,12 @@ async def process_file_task(task_id: str, contents: bytes, is_csv: bool, is_pdf:
                                     parsed = json.loads(text)
                                     if parsed is None:
                                         parsed = {}
+                                        
+                                    chunks_completed += 1
+                                    progress_pct = 50 + int((chunks_completed / total_chunks) * 40)
+                                    TASK_STORE[task_id]["progress"] = progress_pct
+                                    TASK_STORE[task_id]["message"] = f"AI Analyzed {min(chunks_completed * batch_size, len(df))} of {len(df)} transactions..."
+                                        
                                     return parsed
                                 except Exception as e:
                                     last_error = str(e)
@@ -379,8 +388,16 @@ async def process_file_task(task_id: str, contents: bytes, is_csv: bool, is_pdf:
                                     if attempt < 2:
                                         await asyncio.sleep(2 ** attempt)
                                     else:
+                                        chunks_completed += 1
+                                        progress_pct = 50 + int((chunks_completed / total_chunks) * 40)
+                                        TASK_STORE[task_id]["progress"] = progress_pct
+                                        TASK_STORE[task_id]["message"] = f"AI Analyzed {min(chunks_completed * batch_size, len(df))} of {len(df)} transactions..."
                                         return {str(item["id"]): f"AI Error: {last_error}" for item in chunk}
                             
+                            chunks_completed += 1
+                            progress_pct = 50 + int((chunks_completed / total_chunks) * 40)
+                            TASK_STORE[task_id]["progress"] = progress_pct
+                            TASK_STORE[task_id]["message"] = f"AI Analyzed {min(chunks_completed * batch_size, len(df))} of {len(df)} transactions..."
                             return {str(item["id"]): f"AI Error: {last_error}" for item in chunk}
                     
                     tasks = [process_chunk(chunk) for chunk in chunks]
