@@ -126,6 +126,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         clearInterval(pollInterval);
                         statusDiv.className = 'status success';
                         statusDiv.innerText = 'Processing complete!';
+                        progressContainer.style.display = 'none';
                         
                         setTimeout(async () => {
                             try {
