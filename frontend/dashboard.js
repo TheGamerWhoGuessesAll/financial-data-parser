@@ -127,13 +127,32 @@ document.addEventListener('DOMContentLoaded', () => {
                         statusDiv.className = 'status success';
                         statusDiv.innerText = 'Processing complete!';
                         
-                        setTimeout(() => {
-                            const link = document.createElement('a');
-                            link.href = `${baseUrl}/download/${currentTaskId}?token=${token}`;
-                            link.style.display = 'none';
-                            document.body.appendChild(link);
-                            link.click();
-                            document.body.removeChild(link);
+                        setTimeout(async () => {
+                            try {
+                                const downloadRes = await fetch(`${baseUrl}/download/${currentTaskId}`, {
+                                    headers: {
+                                        'Authorization': `Bearer ${token}`
+                                    }
+                                });
+                                
+                                if (!downloadRes.ok) throw new Error('Download failed');
+                                
+                                const blob = await downloadRes.blob();
+                                const url = window.URL.createObjectURL(blob);
+                                const link = document.createElement('a');
+                                link.href = url;
+                                // We can try to extract the filename from the Content-Disposition header if needed,
+                                // but for simplicity, we can default it.
+                                link.download = 'anomalies.xlsx';
+                                document.body.appendChild(link);
+                                link.click();
+                                document.body.removeChild(link);
+                                window.URL.revokeObjectURL(url);
+                            } catch (e) {
+                                console.error('Download error:', e);
+                                statusDiv.className = 'status error';
+                                statusDiv.innerText = 'Failed to download file.';
+                            }
                         }, 1000);
                     } else if (data.status === 'error') {
                         clearInterval(pollInterval);
