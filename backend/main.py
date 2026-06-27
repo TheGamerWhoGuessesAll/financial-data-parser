@@ -66,6 +66,8 @@ class User(Base):
     failed_login_attempts = Column(Integer, default=0)
     locked_until = Column(DateTime, default=None)
     lockout_count = Column(Integer, default=0)
+    reset_token = Column(String, default=None, index=True)
+    reset_token_expiry = Column(DateTime, default=None)
 
 Base.metadata.create_all(bind=engine)
 
@@ -699,6 +701,73 @@ async def process_file_task(task_id: str, contents: bytes, is_csv: bool, is_pdf:
         print(f"Error in background task: {e}")
         TASK_STORE[task_id]["status"] = "error"
         TASK_STORE[task_id]["message"] = f"Error: {str(e)}"
+
+
+import secrets
+import urllib.request
+import json
+
+class ForgotPasswordRequest(BaseModel):
+    email: str
+
+@app.post("/forgot-password")
+def forgot_password(req: ForgotPasswordRequest, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.email == req.email).first()
+    if not user:
+        return {"message": "If that account exists, a recovery email has been sent."}
+    
+    token = secrets.token_urlsafe(32)
+    user.reset_token = token
+    user.reset_token_expiry = datetime.utcnow() + timedelta(minutes=15)
+    db.commit()
+    
+    reset_link = f"https://financial-data-parser.onrender.com/reset_password.html?token={token}"
+    
+    # Send email via Resend API
+    resend_api_key = os.getenv("RESEND_API_KEY")
+    if resend_api_key:
+        try:
+            req_data = json.dumps({
+                "from": "onboarding@resend.dev",
+                "to": [user.email],
+                "subject": "Password Reset Request",
+                "html": f"<p>Click the link below to reset your password:</p><p><a href='{reset_link}'>{reset_link}</a></p><p>This link expires in 15 minutes.</p>"
+            }).encode('utf-8')
+            
+            headers = {
+                "Authorization": f"Bearer {resend_api_key}",
+                "Content-Type": "application/json"
+            }
+            
+            http_req = urllib.request.Request("https://api.resend.com/emails", data=req_data, headers=headers, method="POST")
+            urllib.request.urlopen(http_req)
+        except Exception as e:
+            print("Failed to send email:", e)
+    else:
+        print(f"\n[MOCK EMAIL] To: {user.email}\nSubject: Password Reset\nLink: {reset_link}\n")
+        
+    return {"message": "If that account exists, a recovery email has been sent."}
+
+class ResetPasswordRequest(BaseModel):
+    token: str
+    new_password: str
+
+@app.post("/reset-password")
+def reset_password(req: ResetPasswordRequest, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.reset_token == req.token).first()
+    if not user or user.reset_token_expiry < datetime.utcnow():
+        raise HTTPException(status_code=400, detail="Invalid or expired token")
+        
+    user.hashed_password = get_password_hash(req.new_password)
+    user.reset_token = None
+    user.reset_token_expiry = None
+    # Also unlock the account if it was locked!
+    user.failed_login_attempts = 0
+    user.lockout_count = 0
+    user.locked_until = None
+    db.commit()
+    
+    return {"message": "Password has been reset successfully!"}
 
 
 @app.get("/reset_db")
