@@ -85,6 +85,9 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     async function handleFile(file) {
+        // Reset file input so the same file can be selected again
+        if (fileInput) fileInput.value = '';
+
         const formData = new FormData();
         formData.append('file', file);
         formData.append('keywords', document.getElementById('keywords').value);
