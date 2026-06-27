@@ -62,6 +62,27 @@ document.addEventListener('DOMContentLoaded', () => {
 
     let currentTaskId = null;
     let pollInterval = null;
+    let visualProgress = 0;
+    let targetProgress = 0;
+    let animationFrameId = null;
+
+    function updateVisualProgress() {
+        // Smoothly interpolate towards the target
+        if (visualProgress < targetProgress) {
+            visualProgress += (targetProgress - visualProgress) * 0.05;
+        } 
+        // Creep forward slowly while waiting for the next update (to make it feel continuous)
+        else if (visualProgress < 95 && targetProgress > 0 && targetProgress < 100) {
+            visualProgress += 0.02;
+        }
+        
+        if (visualProgress > 100) visualProgress = 100;
+        
+        progressBar.style.width = `${visualProgress}%`;
+        progressPercent.innerText = `${Math.floor(visualProgress)}%`;
+        
+        animationFrameId = requestAnimationFrame(updateVisualProgress);
+    }
 
     async function handleFile(file) {
         const formData = new FormData();
@@ -71,6 +92,10 @@ document.addEventListener('DOMContentLoaded', () => {
         statusDiv.className = 'status loading';
         statusDiv.innerText = 'Uploading file...';
         progressContainer.style.display = 'none';
+        
+        visualProgress = 0;
+        targetProgress = 0;
+        if (animationFrameId) cancelAnimationFrame(animationFrameId);
 
         try {
             const response = await fetch(`${baseUrl}/upload`, {
@@ -92,6 +117,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 currentTaskId = data.task_id;
                 statusDiv.innerText = 'Processing started...';
                 progressContainer.style.display = 'block';
+                updateVisualProgress(); // start animation loop
                 pollStatus();
             } else {
                 statusDiv.className = 'status error';
@@ -118,12 +144,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 const data = await response.json();
                 
                 if (response.ok) {
-                    progressBar.style.width = `${data.progress}%`;
-                    progressPercent.innerText = `${data.progress}%`;
+                    targetProgress = data.progress;
                     progressText.innerText = data.message;
                     
                     if (data.status === 'completed') {
                         clearInterval(pollInterval);
+                        targetProgress = 100;
+                        visualProgress = 100; // snap to 100 on completion
+                        progressBar.style.width = '100%';
+                        progressPercent.innerText = '100%';
+                        setTimeout(() => { if(animationFrameId) cancelAnimationFrame(animationFrameId); }, 100);
+                        
                         statusDiv.className = 'status success';
                         statusDiv.innerText = 'Processing complete!';
                         progressContainer.style.display = 'none';
