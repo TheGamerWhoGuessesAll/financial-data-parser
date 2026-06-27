@@ -717,3 +717,6 @@ if os.path.exists("frontend"):
     app.mount("/", StaticFiles(directory="frontend", html=True), name="frontend")
 elif os.path.exists("../frontend"):
     app.mount("/", StaticFiles(directory="../frontend", html=True), name="frontend")
+
+
+@app.get(" /reset_db\)
