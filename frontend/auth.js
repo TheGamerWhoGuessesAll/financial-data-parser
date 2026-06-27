@@ -57,4 +57,51 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     }
+    // Forgot Password Logic
+    const forgotPasswordLink = document.getElementById('forgotPasswordLink');
+    const forgotPasswordModal = document.getElementById('forgotPasswordModal');
+    const resetEmailInput = document.getElementById('resetEmailInput');
+    const sendResetBtn = document.getElementById('sendResetBtn');
+    const resetStatus = document.getElementById('resetStatus');
+
+    if (forgotPasswordLink && forgotPasswordModal) {
+        forgotPasswordLink.addEventListener('click', (e) => {
+            e.preventDefault();
+            forgotPasswordModal.style.display = 'flex';
+        });
+    }
+
+    if (sendResetBtn) {
+        sendResetBtn.addEventListener('click', async () => {
+            const email = resetEmailInput.value;
+            if (!email) {
+                resetStatus.style.color = '#ef4444';
+                resetStatus.innerText = 'Please enter an email address';
+                return;
+            }
+
+            sendResetBtn.disabled = true;
+            sendResetBtn.innerText = 'Sending...';
+            resetStatus.innerText = '';
+
+            try {
+                const response = await fetch(`${baseUrl}/forgot-password`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email })
+                });
+                
+                const data = await response.json();
+                
+                resetStatus.style.color = response.ok ? '#22c55e' : '#ef4444';
+                resetStatus.innerText = data.message || data.detail || 'Failed to send reset email';
+            } catch (e) {
+                resetStatus.style.color = '#ef4444';
+                resetStatus.innerText = 'Network error. Please try again.';
+            } finally {
+                sendResetBtn.disabled = false;
+                sendResetBtn.innerText = 'Send Recovery Link';
+            }
+        });
+    }
 });
