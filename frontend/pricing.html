@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pricing | FinParse</title>
+    <link rel="stylesheet" href="index.css?v=5">
+</head>
+<body style="background: var(--bg-dark); color: var(--text-light); font-family: 'Inter', sans-serif;">
+    <nav class="top-nav">
+        <div class="logo">
+            <span class="logo-icon">_</span>
+            FINPARSE
+        </div>
+        <div>
+            <a href="dashboard.html" style="color: var(--text-light); text-decoration: none; font-size: 14px;">Back to Dashboard</a>
+        </div>
+    </nav>
+    
+    <div style="max-width: 900px; margin: 60px auto; padding: 20px; text-align: center;">
+        <h1 style="color: white; font-size: 36px; margin-bottom: 10px;">Purchase Credits</h1>
+        <p style="font-size: 16px; margin-bottom: 50px;">Choose a package to analyze your financial statements.</p>
+        
+        <div style="display: flex; gap: 30px; justify-content: center; flex-wrap: wrap;">
+            <!-- 1 Credit Package -->
+            <div class="auth-box" style="width: 300px; text-align: left; position: relative;">
+                <h3 style="color: white; font-size: 20px; margin-top: 0;">Single Report</h3>
+                <div style="font-size: 36px; color: white; font-weight: bold; margin: 15px 0;">$4.99</div>
+                <p style="font-size: 14px; margin-bottom: 30px;">Perfect for a one-time financial audit.</p>
+                <ul style="list-style: none; padding: 0; margin-bottom: 30px; font-size: 14px;">
+                    <li style="margin-bottom: 10px;">✓ 1 Data Extraction</li>
+                    <li style="margin-bottom: 10px;">✓ Full Anomaly Report</li>
+                    <li style="margin-bottom: 10px;">✓ Excel Download</li>
+                </ul>
+                <button class="auth-btn checkout-btn" data-package="1_credit">Buy Now</button>
+            </div>
+            
+            <!-- 5 Credit Package -->
+            <div class="auth-box" style="width: 300px; text-align: left; position: relative; border: 1px solid var(--primary);">
+                <div style="position: absolute; top: -12px; right: 20px; background: var(--primary); color: white; font-size: 12px; padding: 4px 10px; border-radius: 20px; font-weight: bold;">BEST VALUE</div>
+                <h3 style="color: white; font-size: 20px; margin-top: 0;">Pro Bundle</h3>
+                <div style="font-size: 36px; color: white; font-weight: bold; margin: 15px 0;">$19.99</div>
+                <p style="font-size: 14px; margin-bottom: 30px;">Save 20% on 5 complete statement audits.</p>
+                <ul style="list-style: none; padding: 0; margin-bottom: 30px; font-size: 14px;">
+                    <li style="margin-bottom: 10px;">✓ 5 Data Extractions</li>
+                    <li style="margin-bottom: 10px;">✓ Full Anomaly Reports</li>
+                    <li style="margin-bottom: 10px;">✓ Priority Support</li>
+                </ul>
+                <button class="auth-btn checkout-btn" data-package="5_credits">Buy Now</button>
+            </div>
+        </div>
+        
+        <div id="checkoutError" style="color: #ef4444; margin-top: 30px; font-size: 14px;"></div>
+    </div>
+
+    <script>
+        const baseUrl = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' 
+            ? 'http://127.0.0.1:8000' 
+            : 'https://financial-data-parser.onrender.com';
+            
+        const token = localStorage.getItem('access_token');
+        if (!token) {
+            window.location.href = 'login.html';
+        }
+
+        document.querySelectorAll('.checkout-btn').forEach(btn => {
+            btn.addEventListener('click', async (e) => {
+                const packageId = e.target.getAttribute('data-package');
+                const errorDiv = document.getElementById('checkoutError');
+                errorDiv.innerText = '';
+                e.target.disabled = true;
+                e.target.innerText = 'Connecting...';
+                
+                try {
+                    const response = await fetch(`${baseUrl}/create-checkout-session`, {
+                        method: 'POST',
+                        headers: { 
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${token}`
+                        },
+                        body: JSON.stringify({ package: packageId })
+                    });
+                    
+                    const data = await response.json();
+                    
+                    if (response.ok) {
+                        window.location.href = data.checkout_url;
+                    } else {
+                        errorDiv.innerText = data.detail || 'Checkout failed.';
+                        e.target.disabled = false;
+                        e.target.innerText = 'Buy Now';
+                    }
+                } catch (err) {
+                    errorDiv.innerText = 'Network error. Please try again later.';
+                    e.target.disabled = false;
+                    e.target.innerText = 'Buy Now';
+                }
+            });
+        });
+    </script>
+</body>
+</html>
