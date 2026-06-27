@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>FinParse | Data Analysis</title>
-    <link rel="stylesheet" href="index.css?v=4">
+    <link rel="stylesheet" href="index.css?v=5">
 </head>
 <body>
     <!-- Retro Cookie Popup -->
@@ -14,8 +14,8 @@
                 <p>We use cookies to enhance your experience, analyze our traffic, and provide personalized services. By clicking "Accept All", you consent to our use of cookies. <a href="#" style="color: var(--primary); text-decoration: none;">Learn more</a></p>
             </div>
             <div class="cookie-actions">
-                <button class="cookie-btn secondary" id="manageCookiesBtn">Manage</button>
-                <button class="cookie-btn primary" id="acceptCookiesBtn">Accept All</button>
+                <button class="cookie-btn secondary" id="manageCookiesBtn" onclick="document.getElementById('cookieOverlay').style.display='none'">Manage</button>
+                <button class="cookie-btn primary" id="acceptCookiesBtn" onclick="document.getElementById('cookieOverlay').style.display='none'">Accept All</button>
             </div>
         </div>
     </div>
@@ -39,7 +39,7 @@
         
         <div class="banner" id="promoBanner">
             <span>Showcase your FinParse expertise on LinkedIn &ndash; connect your parser &rarr;</span>
-            <button id="closeBanner">&times;</button>
+            <button id="closeBanner" onclick="document.getElementById('promoBanner').style.display='none'">&times;</button>
         </div>
         
         <div class="hero">
@@ -55,6 +55,6 @@
         </div>
     </div>
 
-    <script src="landing.js?v=4"></script>
+    <script src="landing.js?v=5"></script>
 </body>
 </html>
