@@ -14,6 +14,33 @@ document.addEventListener('DOMContentLoaded', () => {
     } else {
         if(mainApp) mainApp.style.display = 'block'; // Show app if authenticated
     }
+    // Fetch User Info
+    async function fetchUserInfo() {
+        try {
+            const res = await fetch(`${baseUrl}/user/me`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (res.ok) {
+                const data = await res.json();
+                const planEl = document.getElementById('planDisplay');
+                const creditEl = document.getElementById('creditDisplay');
+                if (planEl) {
+                    const planName = data.plan.charAt(0).toUpperCase() + data.plan.slice(1);
+                    planEl.innerText = `Plan: ${planName}`;
+                }
+                if (creditEl) {
+                    creditEl.innerText = `Remaining: ${data.credits}`;
+                }
+            } else if (res.status === 401) {
+                localStorage.removeItem('access_token');
+                window.location.href = 'login.html';
+            }
+        } catch (e) {
+            console.error(e);
+        }
+    }
+    fetchUserInfo();
+
 
     // Logout
     const logoutBtn = document.getElementById('logoutBtn');
