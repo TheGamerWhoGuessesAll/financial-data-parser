@@ -53,6 +53,9 @@ class User(Base):
     id = Column(Integer, primary_key=True, index=True)
     email = Column(String, unique=True, index=True)
     hashed_password = Column(String)
+    failed_login_attempts = Column(Integer, default=0)
+    locked_until = Column(DateTime, default=None)
+    lockout_count = Column(Integer, default=0)
 
 Base.metadata.create_all(bind=engine)
 
@@ -75,7 +78,7 @@ def verify_password(plain_password, hashed_password):
     return bcrypt.checkpw(plain_password.encode('utf-8'), hashed_password.encode('utf-8'))
 
 def get_password_hash(password):
-    return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+    return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt(rounds=14)).decode('utf-8')
 
 def create_access_token(data: dict):
     to_encode = data.copy()
@@ -135,8 +138,35 @@ def signup(request: Request, user: UserCreate, db: Session = Depends(get_db)):
 @limiter.limit("5/minute")
 def login(request: Request, user: UserLogin, db: Session = Depends(get_db)):
     db_user = db.query(User).filter(User.email == user.email).first()
-    if not db_user or not verify_password(user.password, db_user.hashed_password):
+    
+    if not db_user:
         raise HTTPException(status_code=401, detail="Incorrect email or password")
+        
+    if db_user.locked_until and db_user.locked_until > datetime.utcnow():
+        raise HTTPException(status_code=403, detail=f"Account locked until {db_user.locked_until.strftime('%H:%M:%S')} UTC due to too many failed attempts.")
+        
+    if not verify_password(user.password, db_user.hashed_password):
+        db_user.failed_login_attempts = (db_user.failed_login_attempts or 0) + 1
+        if db_user.failed_login_attempts >= 5:
+            db_user.lockout_count = (db_user.lockout_count or 0) + 1
+            # Exponential backoff
+            backoff_minutes = 5
+            if db_user.lockout_count == 2: backoff_minutes = 15
+            elif db_user.lockout_count == 3: backoff_minutes = 60
+            elif db_user.lockout_count >= 4: backoff_minutes = 1440
+            
+            db_user.locked_until = datetime.utcnow() + timedelta(minutes=backoff_minutes)
+            db_user.failed_login_attempts = 0
+            
+        db.commit()
+        raise HTTPException(status_code=401, detail="Incorrect email or password")
+        
+    # Correct password - reset counters
+    db_user.failed_login_attempts = 0
+    db_user.lockout_count = 0
+    db_user.locked_until = None
+    db.commit()
+    
     access_token = create_access_token(data={"sub": db_user.email})
     return {"access_token": access_token, "token_type": "bearer"}
 
