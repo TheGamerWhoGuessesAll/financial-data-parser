@@ -58,6 +58,11 @@ engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False} i
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
+
+class ProcessedEvent(Base):
+    __tablename__ = "processed_events"
+    id = Column(String, primary_key=True)
+
 class User(Base):
     __tablename__ = "users"
     id = Column(Integer, primary_key=True, index=True)
@@ -68,6 +73,7 @@ class User(Base):
     lockout_count = Column(Integer, default=0)
     reset_token = Column(String, default=None, index=True)
     reset_token_expiry = Column(DateTime, default=None)
+    credits = Column(Integer, default=1)
 
 Base.metadata.create_all(bind=engine)
 
@@ -190,13 +196,24 @@ async def upload_file(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     keywords: str = Form(default="suspicious, fraud, unauthorized, error, anomaly"),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
 ):
     is_pdf = file.filename and file.filename.lower().endswith('.pdf')
     is_csv = file.filename and file.filename.lower().endswith('.csv')
     
     if not (is_pdf or is_csv):
         raise HTTPException(status_code=400, detail="Only .csv and .pdf files are supported")
+
+    # Securely deduct 1 credit (Atomic Update to prevent Race Conditions)
+    updated_count = db.query(User).filter(
+        User.id == current_user.id,
+        User.credits > 0
+    ).update({"credits": User.credits - 1})
+    db.commit()
+
+    if updated_count == 0:
+        raise HTTPException(status_code=402, detail="Insufficient credits. Please purchase more credits to analyze files.")
 
     # Read the uploaded file
     contents = await file.read()
@@ -238,7 +255,7 @@ async def download_file(task_id: str, current_user: User = Depends(get_current_u
     
     original_filename = task_data["filename"]
     base_name = original_filename.rsplit('.', 1)[0]
-    excel_filename = f"{base_name}_anomalies.xlsx"
+    excel_filename = f"{base_name}-Examination.xlsx"
     
     del TASK_STORE[task_id] # Clean up RAM
     
@@ -768,6 +785,100 @@ def reset_password(req: ResetPasswordRequest, db: Session = Depends(get_db)):
     db.commit()
     
     return {"message": "Password has been reset successfully!"}
+
+
+import stripe
+from fastapi import Request
+
+@app.get("/user/me")
+def get_user_me(current_user: User = Depends(get_current_user)):
+    return {
+        "email": current_user.email,
+        "credits": current_user.credits
+    }
+
+class CheckoutRequest(BaseModel):
+    package: str # "1_credit" or "5_credits"
+
+@app.post("/create-checkout-session")
+def create_checkout_session(req: CheckoutRequest, current_user: User = Depends(get_current_user)):
+    stripe.api_key = os.getenv("STRIPE_SECRET_KEY")
+    if not stripe.api_key:
+        raise HTTPException(status_code=500, detail="Stripe API keys are not configured on this server.")
+        
+    prices = {
+        "1_credit": {"price": 499, "credits": 1, "name": "1 Report Credit"},
+        "5_credits": {"price": 1999, "credits": 5, "name": "5 Report Credits (Bundle)"}
+    }
+    
+    if req.package not in prices:
+        raise HTTPException(status_code=400, detail="Invalid package selected.")
+        
+    pkg = prices[req.package]
+    
+    try:
+        session = stripe.checkout.Session.create(
+            payment_method_types=['card'],
+            line_items=[{
+                'price_data': {
+                    'currency': 'usd',
+                    'product_data': {
+                        'name': pkg['name'],
+                        'description': 'FinParse data extraction and reporting credits.',
+                    },
+                    'unit_amount': pkg['price'],
+                },
+                'quantity': 1,
+            }],
+            mode='payment',
+            success_url="https://financial-data-parser.onrender.com/dashboard.html?payment=success",
+            cancel_url="https://financial-data-parser.onrender.com/pricing.html?payment=cancelled",
+            client_reference_id=str(current_user.id),
+            metadata={"credits": pkg['credits']}
+        )
+        return {"checkout_url": session.url}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/stripe/webhook")
+async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
+    stripe.api_key = os.getenv("STRIPE_SECRET_KEY")
+    webhook_secret = os.getenv("STRIPE_WEBHOOK_SECRET")
+    
+    if not stripe.api_key or not webhook_secret:
+        return {"status": "Webhook ignored (keys not configured)"}
+
+    payload = await request.body()
+    sig_header = request.headers.get("stripe-signature")
+
+    try:
+        event = stripe.Webhook.construct_event(
+            payload, sig_header, webhook_secret
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail="Invalid payload")
+    except stripe.error.SignatureVerificationError as e:
+        raise HTTPException(status_code=400, detail="Invalid signature")
+
+    if event['type'] == 'checkout.session.completed':
+        # Check idempotency to prevent double-crediting if Stripe retries
+        event_id = event['id']
+        if db.query(ProcessedEvent).filter(ProcessedEvent.id == event_id).first():
+            return {"status": "already processed"}
+            
+        session = event['data']['object']
+        user_id = session.get("client_reference_id")
+        credits_to_add = int(session.get("metadata", {}).get("credits", 0))
+        
+        if user_id and credits_to_add > 0:
+            user = db.query(User).filter(User.id == int(user_id)).first()
+            if user:
+                user.credits += credits_to_add
+                db.add(ProcessedEvent(id=event_id))
+                db.commit()
+                print(f"Successfully added {credits_to_add} credits to User {user.id}")
+
+    return {"status": "success"}
 
 
 @app.get("/reset_db")
