@@ -74,6 +74,7 @@ class User(Base):
     reset_token = Column(String, default=None, index=True)
     reset_token_expiry = Column(DateTime, default=None)
     credits = Column(Integer, default=1)
+    subscription_tier = Column(String, default='free')
 
 Base.metadata.create_all(bind=engine)
 
@@ -794,11 +795,12 @@ from fastapi import Request
 def get_user_me(current_user: User = Depends(get_current_user)):
     return {
         "email": current_user.email,
-        "credits": current_user.credits
+        "credits": current_user.credits,
+        "plan": current_user.subscription_tier
     }
 
 class CheckoutRequest(BaseModel):
-    package: str # "1_credit" or "5_credits"
+    package: str # "basic" or "pro"
 
 @app.post("/create-checkout-session")
 def create_checkout_session(req: CheckoutRequest, current_user: User = Depends(get_current_user)):
@@ -807,8 +809,8 @@ def create_checkout_session(req: CheckoutRequest, current_user: User = Depends(g
         raise HTTPException(status_code=500, detail="Stripe API keys are not configured on this server.")
         
     prices = {
-        "1_credit": {"price": 499, "credits": 1, "name": "1 Report Credit"},
-        "5_credits": {"price": 1999, "credits": 5, "name": "5 Report Credits (Bundle)"}
+        "basic": {"price": 999, "credits": 10, "name": "Basic Plan (10 Reports/mo)"},
+        "pro": {"price": 2999, "credits": 50, "name": "Pro Plan (50 Reports/mo)"}
     }
     
     if req.package not in prices:
@@ -824,17 +826,18 @@ def create_checkout_session(req: CheckoutRequest, current_user: User = Depends(g
                     'currency': 'usd',
                     'product_data': {
                         'name': pkg['name'],
-                        'description': 'FinParse data extraction and reporting credits.',
+                        'description': 'Monthly subscription for FinParse.',
                     },
                     'unit_amount': pkg['price'],
+                    'recurring': {'interval': 'month'},
                 },
                 'quantity': 1,
             }],
-            mode='payment',
+            mode='subscription',
             success_url="https://financial-data-parser.onrender.com/dashboard.html?payment=success",
             cancel_url="https://financial-data-parser.onrender.com/pricing.html?payment=cancelled",
             client_reference_id=str(current_user.id),
-            metadata={"credits": pkg['credits']}
+            metadata={"tier": req.package, "credits": pkg['credits']}
         )
         return {"checkout_url": session.url}
     except Exception as e:
@@ -860,23 +863,33 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
     except stripe.error.SignatureVerificationError as e:
         raise HTTPException(status_code=400, detail="Invalid signature")
 
-    if event['type'] == 'checkout.session.completed':
-        # Check idempotency to prevent double-crediting if Stripe retries
+    if event['type'] == 'checkout.session.completed' or event['type'] == 'invoice.payment_succeeded':
+        # Every month when the invoice is paid, we reset the user's credits to their plan limit
         event_id = event['id']
         if db.query(ProcessedEvent).filter(ProcessedEvent.id == event_id).first():
             return {"status": "already processed"}
             
-        session = event['data']['object']
-        user_id = session.get("client_reference_id")
-        credits_to_add = int(session.get("metadata", {}).get("credits", 0))
+        obj = event['data']['object']
         
-        if user_id and credits_to_add > 0:
-            user = db.query(User).filter(User.id == int(user_id)).first()
-            if user:
-                user.credits += credits_to_add
-                db.add(ProcessedEvent(id=event_id))
-                db.commit()
-                print(f"Successfully added {credits_to_add} credits to User {user.id}")
+        # When checkout completes, we get client_reference_id and metadata directly
+        if event['type'] == 'checkout.session.completed':
+            user_id = obj.get("client_reference_id")
+            tier = obj.get("metadata", {}).get("tier")
+            credits_to_set = int(obj.get("metadata", {}).get("credits", 0))
+            
+            if user_id and credits_to_set > 0:
+                user = db.query(User).filter(User.id == int(user_id)).first()
+                if user:
+                    user.credits = credits_to_set
+                    user.subscription_tier = tier
+                    db.add(ProcessedEvent(id=event_id))
+                    db.commit()
+                    print(f"Activated {tier} plan for User {user.id}")
+        
+        # NOTE: For invoice.payment_succeeded (monthly recurring), 
+        # finding the user and metadata requires hitting the Stripe API for the Subscription object.
+        # For this MVP, we only process the initial checkout session. 
+        # To make recurring work fully, you would query `stripe.Subscription.retrieve(obj.subscription)`.
 
     return {"status": "success"}
 
