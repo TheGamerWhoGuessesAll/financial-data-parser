@@ -1,9 +1,9 @@
 
 :root {
-    --bg-dark: #1e1e1e;
-    --bg-darker: #181818;
+    --bg-dark: #f8f9fa;
+    --bg-darker: #ffffff;
     --bg-nav: #000000;
-    --text: #ffffff;
+    --text: #334155;
     --text-light: #a3a3a3;
     --primary: #2563eb;
     --primary-hover: #1d4ed8;
@@ -145,10 +145,22 @@ body {
 /* Hero */
 .hero {
     display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 40px;
     padding: 80px 10%;
     position: relative;
     overflow: hidden;
 }
+
+@media (max-width: 768px) {
+    .hero {
+        flex-direction: column;
+        text-align: center;
+        padding: 40px 5%;
+    }
+}
+
 .hero-content {
     flex: 1;
     z-index: 2;
@@ -465,4 +477,173 @@ body {
         flex-direction: column;
         gap: 1rem;
     }
+}
+
+/* FAQ Section */
+.faq-section {
+    padding: 60px 10%;
+    color: white;
+}
+.faq-section h2 {
+    font-size: 32px;
+    margin-bottom: 30px;
+    text-align: center;
+}
+.faq-item {
+    margin-bottom: 20px;
+    background: #181818;
+    border-radius: 8px;
+    border: 1px solid #333;
+    transition: all 0.3s ease;
+    overflow: hidden;
+}
+.faq-item summary {
+    padding: 20px;
+    font-size: 20px;
+    color: #4da6ff;
+    font-weight: bold;
+    cursor: pointer;
+    list-style: none;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+.faq-item summary::-webkit-details-marker {
+    display: none;
+}
+.faq-item summary::after {
+    content: '+';
+    font-size: 24px;
+    color: #4da6ff;
+    transition: transform 0.3s ease;
+}
+.faq-item[open] summary::after {
+    content: '\2212';
+    transform: rotate(180deg);
+}
+.faq-item p {
+    margin: 0;
+    padding: 0 20px 20px 20px;
+    color: #ccc;
+    line-height: 1.5;
+}
+
+/* Legal Content */
+.legal-content {
+    padding: 60px 10%;
+    color: white;
+    max-width: 800px;
+    margin: 0 auto;
+    min-height: 60vh;
+}
+.legal-content h1 {
+    font-size: 36px;
+    margin-bottom: 20px;
+}
+.legal-content p {
+    line-height: 1.6;
+    color: #ccc;
+}
+
+/* Refactored Styles */
+.primary-cta {
+    display: inline-block;
+    background-color: var(--primary);
+    color: #ffffff;
+    font-size: 1.25rem;
+    font-weight: bold;
+    padding: 16px 32px;
+    border-radius: 8px;
+    text-decoration: none;
+    margin-top: 24px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    transition: background-color 0.3s, transform 0.2s, box-shadow 0.2s, filter 0.2s;
+}
+.primary-cta:hover {
+    background-color: #1d4ed8;
+    transform: translateY(-2px) scale(1.02);
+    box-shadow: 0 8px 15px rgba(37, 99, 235, 0.3);
+    color: #ffffff;
+    filter: brightness(1.1);
+}
+
+.hero h1 {
+    color: var(--text);
+}
+
+.sandbox-container {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 24px;
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+    width: 100%;
+    max-width: 500px;
+    text-align: center;
+}
+
+#sandbox-btn {
+    background-color: #10b981;
+    color: white;
+    border: none;
+    padding: 12px 24px;
+    font-size: 1rem;
+    font-weight: bold;
+    border-radius: 6px;
+    cursor: pointer;
+    margin-bottom: 20px;
+    transition: background-color 0.2s;
+}
+#sandbox-btn:hover {
+    background-color: #059669;
+}
+#sandbox-btn:disabled {
+    background-color: #9ca3af;
+    cursor: not-allowed;
+}
+
+.sandbox-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.875rem;
+    text-align: left;
+}
+.sandbox-table th, .sandbox-table td {
+    padding: 12px 8px;
+    border-bottom: 1px solid #e2e8f0;
+}
+.sandbox-table th {
+    font-weight: 600;
+    color: #64748b;
+}
+
+@keyframes anomalyPulse {
+    0% { background-color: rgba(254, 240, 138, 0.2); opacity: 0.5; transform: scale(0.98); }
+    50% { background-color: rgba(254, 240, 138, 1); transform: scale(1.01); }
+    100% { background-color: #fef08a; opacity: 1; transform: scale(1); }
+}
+
+.row-anomaly {
+    background-color: #fef08a !important;
+    color: #854d0e !important;
+    font-weight: 500;
+    animation: anomalyPulse 0.6s ease-out forwards;
+}
+
+/* Adjustments for light theme visibility */
+.faq-section h2 {
+    color: var(--text);
+}
+.faq-item {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+}
+.faq-item summary {
+    color: var(--text);
+}
+.faq-item p {
+    color: #475569;
+}
+.banner {
+    background: #1e40af;
 }
