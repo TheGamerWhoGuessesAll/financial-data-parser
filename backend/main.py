@@ -30,15 +30,7 @@ from openpyxl.chart.label import DataLabelList
 
 app = FastAPI(title="Financial Data Parser")
 
-@app.on_event("startup")
-def startup_event():
-    # Automatically wipe and recreate the database to fix the corrupted schema on Render
-    try:
-        Base.metadata.drop_all(bind=engine)
-        Base.metadata.create_all(bind=engine)
-        print("Database automatically reset!")
-    except Exception as e:
-        print(f"Migration error: {e}")
+
 
 app.add_middleware(
     CORSMiddleware,
