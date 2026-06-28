@@ -292,7 +292,7 @@ async def process_file_task(task_id: str, contents: bytes, is_csv: bool, is_pdf:
                 raise ValueError("User not found")
                 
             # Check for monthly reset
-            now = datetime.datetime.now()
+            now = datetime.now()
             if not user.last_reset_date or user.last_reset_date.month != now.month or user.last_reset_date.year != now.year:
                 user.rows_processed_this_month = 0
                 user.last_reset_date = now
@@ -807,8 +807,7 @@ from fastapi import Request
 
 @app.get("/user/me")
 def get_user_me(current_user: User = Depends(get_current_user)):
-    import datetime
-    tier = current_user.subscription_tier or 'free'
+        tier = current_user.subscription_tier or 'free'
     if tier == 'free':
         limit = 100
     elif tier == 'budget':
@@ -818,7 +817,7 @@ def get_user_me(current_user: User = Depends(get_current_user)):
     else:
         limit = 'Unlimited'
         
-    now = datetime.datetime.now()
+    now = datetime.now()
     if not current_user.last_reset_date or current_user.last_reset_date.month != now.month or current_user.last_reset_date.year != now.year:
         usage = 0
     else:
@@ -905,8 +904,7 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
         
         # When checkout completes, we get client_reference_id and metadata directly
         if event['type'] == 'checkout.session.completed':
-            import datetime
-            user_id = obj.get("client_reference_id")
+                        user_id = obj.get("client_reference_id")
             tier = obj.get("metadata", {}).get("tier")
             
             if user_id and tier:
@@ -914,7 +912,7 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
                 if user:
                     user.subscription_tier = tier
                     user.rows_processed_this_month = 0
-                    user.last_reset_date = datetime.datetime.now()
+                    user.last_reset_date = datetime.now()
                     db.add(ProcessedEvent(id=event_id))
                     db.commit()
                     print(f"Activated {tier} plan for User {user.id}")
