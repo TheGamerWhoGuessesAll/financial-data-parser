@@ -285,17 +285,26 @@ async def process_file_task(task_id: str, contents: bytes, is_csv: bool, is_pdf:
                         
         import re
         
-        df_str = df.astype(str)
-        has_newline = df_str.apply(lambda x: x.str.contains('\n', na=False, regex=False)).any(axis=1)
+        df_str = df.astype(object).fillna("").astype(str)
+        has_newline = df_str.apply(lambda x: x.str.count(r'[\n\r]') > 4).any(axis=1)
         date_pattern = r'\b\d{2,4}[-/]\d{1,2}[-/]\d{2,4}\b'
-        has_multiple_dates = df_str.apply(lambda x: x.str.count(date_pattern) >= 2).any(axis=1)
-        malformed_mask = has_newline | has_multiple_dates
+        has_multiple_dates = df_str.apply(lambda x: x.str.count(date_pattern) >= 4).any(axis=1)
+        is_all_empty = df_str.apply(lambda x: x.str.strip() == "").all(axis=1)
+        has_html_tags = df_str.apply(lambda x: x.str.contains(r'<[^>]+>', na=False, regex=True)).any(axis=1)
+        is_header_repeat = df_str.apply(lambda x: x.str.match(r'(?i)^\s*(date|amount|description|merchant)\s*$')).any(axis=1)
+        has_absurd_length = df_str.apply(lambda x: x.str.len() > 500).any(axis=1)
+        
+        gibberish_pattern = r'^([^a-zA-Z0-9]*[^a-zA-Z0-9\s][^a-zA-Z0-9]*|[^ \d]{20,})$'
+        is_gibberish = df_str.apply(lambda x: x.str.match(gibberish_pattern)).any(axis=1)
+        
+        malformed_mask = (has_newline | has_multiple_dates | is_all_empty | 
+                          has_html_tags | is_header_repeat | has_absurd_length | is_gibberish)
         
         num_malformed = int(malformed_mask.sum())
         
         if num_malformed > 0:
             df = df[~malformed_mask].reset_index(drop=True)
-            global_warnings.append(f"{num_malformed} malformed rows were skipped.")
+            global_warnings.append(f"{num_malformed} malformed rows were skipped (failed advanced validation: empty, html, gibberish, etc.).")
             
         # --- ROW COUNTING & LIMIT CHECKING ---
         effective_rows = sum(max(1, len(str(row)) // 200) for _, row in df.iterrows())
