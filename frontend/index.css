@@ -1,10 +1,10 @@
 
 :root {
-    --bg-dark: #f8f9fa;
+    --bg-dark: #f1f5f9;
     --bg-darker: #ffffff;
-    --bg-nav: #000000;
+    --bg-nav: #ffffff;
     --text: #334155;
-    --text-light: #a3a3a3;
+    --text-light: #64748b;
     --primary: #2563eb;
     --primary-hover: #1d4ed8;
     --accent: #00e5ff;
@@ -30,7 +30,7 @@ body {
     height: 60px;
     display: flex;
     align-items: center;
-    border-bottom: 1px solid #333;
+    border-bottom: 1px solid #e2e8f0;
 }
 .logo {
     font-weight: 700;
@@ -39,10 +39,11 @@ body {
     align-items: center;
     gap: 8px;
     margin-right: 40px;
+    color: var(--text);
 }
 .logo-icon {
-    background: linear-gradient(45deg, #ff007f, #ffaa00);
-    color: black;
+    background: linear-gradient(45deg, var(--primary), #00e5ff);
+    color: white;
     padding: 2px 6px;
     border-radius: 4px;
     font-family: monospace;
@@ -53,13 +54,13 @@ body {
     gap: 24px;
 }
 .nav-links a {
-    color: #ccc;
+    color: var(--text-light);
     text-decoration: none;
     font-size: 14px;
     transition: color 0.2s;
 }
 .nav-links a:hover {
-    color: white;
+    color: var(--primary);
 }
 
 /* Sub Nav */
@@ -70,11 +71,12 @@ body {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    border-bottom: 1px solid #333;
+    border-bottom: 1px solid #e2e8f0;
 }
 .sub-logo {
     font-size: 20px;
     font-weight: bold;
+    color: var(--text);
 }
 .sub-links {
     display: flex;
@@ -83,12 +85,12 @@ body {
     flex-grow: 1;
 }
 .sub-links a {
-    color: #ccc;
+    color: var(--text-light);
     text-decoration: none;
     font-size: 14px;
 }
 .sub-links a:hover {
-    color: white;
+    color: var(--primary);
 }
 .sub-actions {
     display: flex;
@@ -97,15 +99,15 @@ body {
 }
 .nav-login-btn {
     background: transparent;
-    border: 1px solid #555;
-    color: white;
+    border: 1px solid #cbd5e1;
+    color: var(--text);
     padding: 8px 16px;
     border-radius: 20px;
     cursor: pointer;
     font-weight: 500;
 }
 .nav-login-btn:hover {
-    background: #333;
+    background: #e2e8f0;
 }
 .nav-download-btn {
     background: var(--primary);
@@ -122,7 +124,7 @@ body {
 
 /* Banner */
 .banner {
-    background: #004d99;
+    background: var(--primary);
     color: white;
     text-align: center;
     padding: 12px;
