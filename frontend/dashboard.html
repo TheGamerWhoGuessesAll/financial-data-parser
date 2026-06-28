@@ -22,8 +22,8 @@
         <nav class="sub-nav">
             <div class="sub-logo" style="font-size: 16px; font-weight: normal; color: #aaa;">Workspace / Data Parser</div>
             <div class="user-profile" style="display: flex; align-items: center; gap: 15px;">
-            <div id="creditDisplay" style="font-size: 14px; font-weight: bold;">Credits: --</div>
-            <a href="pricing.html" style="background: var(--primary); color: white; text-decoration: none; padding: 6px 12px; border-radius: 4px; font-size: 13px; font-weight: bold;">Buy Credits</a>
+            <div id="creditDisplay" style="font-size: 14px; font-weight: bold;">Usage: -- / --</div>
+            <a href="pricing.html" id="upgradeBtn" style="background: var(--primary); color: white; text-decoration: none; padding: 6px 12px; border-radius: 4px; font-size: 13px; font-weight: bold;">Upgrade to Pro</a>
             <button id="logoutBtn" style="background: transparent; border: 1px solid #444; color: var(--text-light); cursor: pointer; padding: 6px 12px; border-radius: 4px; font-size: 13px;">Logout</button>
         </div>
         </nav>
@@ -39,10 +39,7 @@
                 <input type="file" id="fileInput" class="hidden-input">
             </div>
             
-            <div style="margin-top: 20px; text-align: left;">
-                <label for="keywords" style="display: block; margin-bottom: 8px; color: var(--text-light); font-size: 14px; font-weight: 500;">Suspicious Keywords (comma separated):</label>
-                <input type="text" id="keywords" value="suspicious, fraud, unauthorized, error, anomaly" class="auth-input">
-            </div>
+
 
             <div id="progressContainer" style="display: none; margin-top: 20px;">
                 <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
