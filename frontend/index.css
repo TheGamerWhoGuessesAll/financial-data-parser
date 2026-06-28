@@ -362,3 +362,107 @@ body {
     text-align: center;
     color: white;
 }
+
+/* Footer Styles */
+.site-footer {
+    width: 100%;
+    background: linear-gradient(180deg, #131313 0%, #0a0a0a 100%);
+    padding: 4rem 2rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: flex-start;
+    box-sizing: border-box;
+    gap: 2rem;
+    position: relative;
+    overflow: hidden;
+}
+
+.site-footer::before {
+    content: "";
+    position: absolute;
+    top: 0; left: 0; right: 0; height: 1px;
+    background: linear-gradient(90deg, transparent, var(--primary), var(--accent), transparent);
+    opacity: 0.5;
+}
+
+.security-badge {
+    flex: 1;
+    min-width: 300px;
+    max-width: 600px;
+    position: relative;
+    z-index: 1;
+}
+
+.security-badge h4 {
+    margin: 0 0 10px 0;
+    color: var(--text);
+    font-size: 1.1rem;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    background: linear-gradient(90deg, #ffffff, #a3a3a3);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+.security-badge p {
+    margin: 0;
+    color: var(--text-light);
+    font-size: 0.9rem;
+    line-height: 1.6;
+}
+
+.footer-links {
+    display: flex;
+    gap: 1.5rem;
+    position: relative;
+    z-index: 1;
+}
+
+.footer-links a {
+    color: var(--text-light);
+    text-decoration: none;
+    font-size: 0.95rem;
+    transition: all 0.3s ease;
+    position: relative;
+    padding-bottom: 2px;
+}
+
+.footer-links a::after {
+    content: '';
+    position: absolute;
+    width: 0;
+    height: 2px;
+    bottom: 0;
+    left: 0;
+    background: linear-gradient(90deg, var(--primary), var(--accent));
+    transition: width 0.3s ease;
+    border-radius: 2px;
+}
+
+.footer-links a:hover {
+    color: #ffffff;
+    transform: translateY(-2px);
+    text-shadow: 0 0 8px rgba(0, 229, 255, 0.4);
+}
+
+.footer-links a:hover::after {
+    width: 100%;
+}
+
+@media (max-width: 768px) {
+    .site-footer {
+        flex-direction: column;
+        padding: 2rem 1rem;
+        gap: 1.5rem;
+    }
+    .security-badge {
+        min-width: 100%;
+    }
+    .footer-links {
+        width: 100%;
+        flex-direction: column;
+        gap: 1rem;
+    }
+}
