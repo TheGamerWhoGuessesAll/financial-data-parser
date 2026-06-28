@@ -749,7 +749,7 @@ def forgot_password(req: ForgotPasswordRequest, db: Session = Depends(get_db)):
     if resend_api_key:
         try:
             req_data = json.dumps({
-                "from": "onboarding@resend.dev",
+                "from": "support@finparse.dev",
                 "to": [user.email],
                 "subject": "Password Reset Request",
                 "html": f"<p>Click the link below to reset your password:</p><p><a href='{reset_link}'>{reset_link}</a></p><p>This link expires in 15 minutes.</p>"
