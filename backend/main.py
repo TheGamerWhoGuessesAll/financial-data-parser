@@ -254,6 +254,7 @@ async def download_file(task_id: str, current_user: User = Depends(get_current_u
 
 async def process_file_task(task_id: str, contents: bytes, is_csv: bool, is_pdf: bool, user_id: int):
     try:
+        global_warnings = []
         TASK_STORE[task_id]["message"] = "Extracting data..."
         TASK_STORE[task_id]["progress"] = 10
         
@@ -282,6 +283,20 @@ async def process_file_task(task_id: str, contents: bytes, is_csv: bool, is_pdf:
                     except:
                         pass
                         
+        import re
+        
+        df_str = df.astype(str)
+        has_newline = df_str.apply(lambda x: x.str.contains('\n', na=False, regex=False)).any(axis=1)
+        date_pattern = r'\b\d{2,4}[-/]\d{1,2}[-/]\d{2,4}\b'
+        has_multiple_dates = df_str.apply(lambda x: x.str.count(date_pattern) >= 2).any(axis=1)
+        malformed_mask = has_newline | has_multiple_dates
+        
+        num_malformed = int(malformed_mask.sum())
+        
+        if num_malformed > 0:
+            df = df[~malformed_mask].reset_index(drop=True)
+            global_warnings.append(f"{num_malformed} malformed rows were skipped.")
+            
         # --- ROW COUNTING & LIMIT CHECKING ---
         effective_rows = sum(max(1, len(str(row)) // 200) for _, row in df.iterrows())
         
@@ -628,6 +643,8 @@ async def process_file_task(task_id: str, contents: bytes, is_csv: bool, is_pdf:
             warning_text = "(Note: May be inaccurate for small datasets)"
             if not date_col:
                 warning_text += " | WARNING: No Date/Time column found. Time-based anomalies disabled."
+            if global_warnings:
+                warning_text += " | " + " ".join(global_warnings)
             warning_cell.value = warning_text
             warning_cell.font = Font(size=10, italic=True, color="FFFF0000")
             
