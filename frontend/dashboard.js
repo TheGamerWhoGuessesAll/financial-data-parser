@@ -39,7 +39,12 @@ document.addEventListener('DOMContentLoaded', () => {
                     planEl.innerText = `Plan: ${planName}`;
                 }
                 if (creditEl) {
-                    creditEl.innerText = `Remaining: ${data.credits}`;
+                    let limitText = data.limit === 'Unlimited' ? '∞' : data.limit;
+                    creditEl.innerText = `Usage: ${data.rows_processed_this_month} / ${limitText} rows`;
+                }
+                const upgradeBtn = document.getElementById('upgradeBtn');
+                if (upgradeBtn && data.plan === 'unlimited') {
+                    upgradeBtn.style.display = 'none';
                 }
             } else if (res.status === 401) {
                 localStorage.removeItem('access_token');
@@ -127,7 +132,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const formData = new FormData();
         formData.append('file', file);
-        formData.append('keywords', document.getElementById('keywords').value);
 
         statusDiv.className = 'status loading';
         statusDiv.innerText = 'Uploading file...';
