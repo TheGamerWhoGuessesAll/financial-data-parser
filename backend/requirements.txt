@@ -12,3 +12,5 @@ slowapi
 sqlalchemy
 stripe
 uvicorn
+
+httpx
