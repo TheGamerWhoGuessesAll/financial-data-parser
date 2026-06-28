@@ -30,6 +30,83 @@ from openpyxl.chart.label import DataLabelList
 
 app = FastAPI(title="Financial Data Parser")
 
+# --- GOOGLE OAUTH ---
+import secrets
+import httpx
+from fastapi.responses import RedirectResponse
+
+GOOGLE_CLIENT_ID = os.getenv('GOOGLE_CLIENT_ID')
+GOOGLE_CLIENT_SECRET = os.getenv('GOOGLE_CLIENT_SECRET')
+GOOGLE_REDIRECT_URI = os.getenv('GOOGLE_REDIRECT_URI', 'https://financial-data-parser.onrender.com/auth/google/callback')
+
+@app.get('/login/google')
+def login_google():
+    if not GOOGLE_CLIENT_ID:
+        raise HTTPException(status_code=500, detail='Google Client ID not configured.')
+    
+    auth_url = (
+        f'https://accounts.google.com/o/oauth2/v2/auth?'
+        f'client_id={GOOGLE_CLIENT_ID}&'
+        f'redirect_uri={GOOGLE_REDIRECT_URI}&'
+        f'response_type=code&'
+        f'scope=openid%20email%20profile&'
+        f'access_type=offline'
+    )
+    return RedirectResponse(url=auth_url)
+
+@app.get('/auth/google/callback')
+async def auth_google_callback(code: str, db: Session = Depends(get_db)):
+    if not GOOGLE_CLIENT_ID or not GOOGLE_CLIENT_SECRET:
+        raise HTTPException(status_code=500, detail='Google credentials not configured.')
+        
+    token_url = 'https://oauth2.googleapis.com/token'
+    data = {
+        'code': code,
+        'client_id': GOOGLE_CLIENT_ID,
+        'client_secret': GOOGLE_CLIENT_SECRET,
+        'redirect_uri': GOOGLE_REDIRECT_URI,
+        'grant_type': 'authorization_code',
+    }
+    
+    async with httpx.AsyncClient() as client:
+        # 1. Exchange code for token
+        response = await client.post(token_url, data=data)
+        if response.status_code != 200:
+            raise HTTPException(status_code=400, detail=f'Failed to fetch token: {response.text}')
+        
+        token_data = response.json()
+        access_token = token_data.get('access_token')
+        
+        # 2. Fetch user info
+        user_info_url = 'https://www.googleapis.com/oauth2/v2/userinfo'
+        user_res = await client.get(user_info_url, headers={'Authorization': f'Bearer {access_token}'})
+        if user_res.status_code != 200:
+            raise HTTPException(status_code=400, detail='Failed to fetch user info')
+            
+        user_info = user_res.json()
+        email = user_info.get('email')
+        
+        if not email:
+            raise HTTPException(status_code=400, detail='Email not provided by Google')
+            
+        # 3. Check if user exists, if not create them
+        user = db.query(User).filter(User.email == email).first()
+        if not user:
+            # Create account with random password
+            random_pwd = secrets.token_urlsafe(16)
+            hashed_pwd = get_password_hash(random_pwd)
+            user = User(email=email, hashed_password=hashed_pwd)
+            db.add(user)
+            db.commit()
+            db.refresh(user)
+            
+        # 4. Generate our JWT Token
+        jwt_token = create_access_token(data={'sub': user.email})
+        
+        # 5. Redirect back to frontend dashboard with token in URL (frontend JS will catch and save it)
+        return RedirectResponse(url=f'https://financial-data-parser.onrender.com/dashboard.html?token={jwt_token}')
+
+
 
 
 app.add_middleware(
