@@ -187,6 +187,7 @@ document.addEventListener('DOMContentLoaded', () => {
             } else {
                 statusDiv.className = 'status error';
                 statusDiv.innerText = data.detail || 'An error occurred';
+                fetchUserInfo();
             }
         } catch (error) {
             statusDiv.className = 'status error';
@@ -253,8 +254,10 @@ document.addEventListener('DOMContentLoaded', () => {
                         }, 1000);
                     } else if (data.status === 'error') {
                         clearInterval(pollInterval);
+                        progressContainer.style.display = 'none';
                         statusDiv.className = 'status error';
                         statusDiv.innerText = 'Error: ' + data.message;
+                        fetchUserInfo();
                     }
                 }
             } catch (error) {
