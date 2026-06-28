@@ -3,7 +3,17 @@ const baseUrl = window.location.hostname === 'localhost' || window.location.host
     ? 'http://127.0.0.1:8000' 
     : 'https://financial-data-parser.onrender.com';
 
+
 document.addEventListener('DOMContentLoaded', () => {
+    // Check URL for OAuth token
+    const urlParams = new URLSearchParams(window.location.search);
+    const oauthToken = urlParams.get('token');
+    if (oauthToken) {
+        localStorage.setItem('access_token', oauthToken);
+        // Remove token from URL for security and cleanliness
+        window.history.replaceState({}, document.title, window.location.pathname);
+    }
+
     const token = localStorage.getItem('access_token');
     const mainApp = document.getElementById('mainApp');
     
