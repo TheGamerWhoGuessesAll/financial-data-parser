@@ -48,7 +48,15 @@ POLICY_THRESHOLDS = {
 
 JSON_PATTERN = re.compile(r'\{.*\}', re.DOTALL)
 
-def apply_policy_rules(category, amount):
+def apply_policy_rules(category, amount, raw_text="", is_suspicious=False, suspicion_reason=""):
+    if is_suspicious:
+        return f"Requires Review: AI Flag - {suspicion_reason}"
+        
+    raw_lower = str(raw_text).lower()
+    restricted_terms = ["fraud", "suspicious", "unauthorized", "scam", "stolen", "theft"]
+    if any(term in raw_lower for term in restricted_terms):
+        return "Requires Review: Flagged Keywords"
+        
     if amount is None:
         return "Requires Review: Invalid amount"
         
@@ -493,7 +501,7 @@ async def process_file_task(task_id: str, contents: bytes, is_csv: bool, is_pdf:
                         async with semaphore:
                             prompt = f"""
                             You are a data extraction assistant. Analyze the following list of transactions.
-                            Extract the Vendor Name, Amount, and Category for each transaction.
+                            Extract the Vendor Name, Amount, Category, is_suspicious, and suspicion_reason for each transaction.
                             The category MUST be one of the following ~50 categories:
                             "Advertising", "Airlines", "Automotive", "Bakery", "Bank Fees", "Bookstores", "Car Rental",
                             "Charity", "Clothing", "Coffee", "Consulting", "Convenience Store", "Cosmetics", "Coworking",
@@ -509,8 +517,10 @@ async def process_file_task(task_id: str, contents: bytes, is_csv: bool, is_pdf:
                             - vendor: The extracted vendor name (string)
                             - amount: The numeric amount (number)
                             - category: The best-matching category from the list above (string)
+                            - is_suspicious: evaluating if contextually it looks like fraud/unauthorized (boolean)
+                            - suspicion_reason: explaining why if true, otherwise empty (string)
                             
-                            Do not determine if a transaction is fraud or suspicious.
+                            Evaluate the context, vendor name, and amount. Is this likely fraud, unauthorized, or highly suspicious? Set is_suspicious to true if so.
                             
                             Transactions:
                             {json.dumps(chunk)}
@@ -581,9 +591,17 @@ async def process_file_task(task_id: str, contents: bytes, is_csv: bool, is_pdf:
                             idx_int = int(idx_str)
                             if 0 <= idx_int < len(ai_assessments):
                                 if isinstance(data, dict):
-                                    cat = data.get("category", "Other")
-                                    amt = data.get("amount", 0.0)
-                                    ai_assessments[idx_int] = apply_policy_rules(cat, amt)
+                                    is_susp_raw = data.get("is_suspicious", False)
+                                    is_susp = is_susp_raw if isinstance(is_susp_raw, bool) else str(is_susp_raw).strip().lower() == "true"
+                                    susp_reason = data.get("suspicion_reason", "")
+                                    
+                                    if is_susp:
+                                        ai_assessments[idx_int] = apply_policy_rules(None, None, "", is_susp, susp_reason)
+                                    else:
+                                        cat = data.get("category", "Other")
+                                        amt = data.get("amount", 0.0)
+                                        raw_text = " ".join([str(val) for val in df.values[idx_int]])
+                                        ai_assessments[idx_int] = apply_policy_rules(cat, amt, raw_text, is_susp, susp_reason)
                                 else:
                                     ai_assessments[idx_int] = str(data)
                 else:
@@ -595,6 +613,10 @@ async def process_file_task(task_id: str, contents: bytes, is_csv: bool, is_pdf:
                 ai_assessments = [f"AI Error (Outer): {type(e).__name__} - {err_msg}"] * len(df)
                 
         df['Policy Assessment'] = ai_assessments
+        
+        # Terminology Update: Replace raw occurrences of 'Fraud' and 'Suspicious' in the final output
+        df = df.replace(to_replace=r'(?i)fraud', value='Requires Review', regex=True)
+        df = df.replace(to_replace=r'(?i)suspicious', value='Requires Review', regex=True)
 
         TASK_STORE[task_id]["message"] = "Generating Excel Report..."
         TASK_STORE[task_id]["progress"] = 80
