@@ -68,7 +68,8 @@ class User(Base):
     lockout_count = Column(Integer, default=0)
     reset_token = Column(String, default=None, index=True)
     reset_token_expiry = Column(DateTime, default=None)
-    credits = Column(Integer, default=1)
+    rows_processed_this_month = Column(Integer, default=0)
+    last_reset_date = Column(DateTime, default=None)
     subscription_tier = Column(String, default='free')
 
 Base.metadata.create_all(bind=engine)
@@ -191,7 +192,6 @@ TASK_STORE = {}
 async def upload_file(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
-    keywords: str = Form(default="suspicious, fraud, unauthorized, error, anomaly"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -201,16 +201,7 @@ async def upload_file(
     if not (is_pdf or is_csv):
         raise HTTPException(status_code=400, detail="Only .csv and .pdf files are supported")
 
-    # Securely deduct 1 credit (Atomic Update to prevent Race Conditions)
-    updated_count = db.query(User).filter(
-        User.id == current_user.id,
-        User.credits > 0
-    ).update({"credits": User.credits - 1})
-    db.commit()
-
-    if updated_count == 0:
-        raise HTTPException(status_code=402, detail="Insufficient credits. Please purchase more credits to analyze files.")
-
+    # Limit checking will happen in the background task to avoid blocking the HTTP response
     # Read the uploaded file
     contents = await file.read()
     
@@ -224,7 +215,7 @@ async def upload_file(
         "user_email": current_user.email
     }
     
-    background_tasks.add_task(process_file_task, task_id, contents, is_csv, is_pdf, keywords)
+    background_tasks.add_task(process_file_task, task_id, contents, is_csv, is_pdf, current_user.id)
     return {"task_id": task_id}
 
 @app.get("/status/{task_id}")
@@ -261,7 +252,7 @@ async def download_file(task_id: str, current_user: User = Depends(get_current_u
         headers={"Content-Disposition": f"attachment; filename={excel_filename}"}
     )
 
-async def process_file_task(task_id: str, contents: bytes, is_csv: bool, is_pdf: bool, keywords: str):
+async def process_file_task(task_id: str, contents: bytes, is_csv: bool, is_pdf: bool, user_id: int):
     try:
         TASK_STORE[task_id]["message"] = "Extracting data..."
         TASK_STORE[task_id]["progress"] = 10
@@ -290,6 +281,41 @@ async def process_file_task(task_id: str, contents: bytes, is_csv: bool, is_pdf:
                             df[col] = num_col
                     except:
                         pass
+                        
+        # --- ROW COUNTING & LIMIT CHECKING ---
+        effective_rows = sum(max(1, len(str(row)) // 200) for _, row in df.iterrows())
+        
+        db = SessionLocal()
+        try:
+            user = db.query(User).filter(User.id == user_id).first()
+            if not user:
+                raise ValueError("User not found")
+                
+            # Check for monthly reset
+            now = datetime.datetime.now()
+            if not user.last_reset_date or user.last_reset_date.month != now.month or user.last_reset_date.year != now.year:
+                user.rows_processed_this_month = 0
+                user.last_reset_date = now
+                
+            # Determine Tier Limit
+            tier = user.subscription_tier or 'free'
+            if tier == 'free':
+                limit = 100
+            elif tier == 'budget':
+                limit = 1000
+            elif tier == 'pro':
+                limit = 5000
+            else:
+                limit = float('inf')
+                
+            if user.rows_processed_this_month + effective_rows > limit:
+                raise ValueError(f"Limit Exceeded: This file contains {effective_rows} rows, but you only have {limit - user.rows_processed_this_month} rows remaining in your {tier.capitalize()} plan this month.")
+                
+            user.rows_processed_this_month += effective_rows
+            db.commit()
+        finally:
+            db.close()
+        # ------------------------------------
         
         TASK_STORE[task_id]["message"] = "Cleaning data & running Math Engine..."
         TASK_STORE[task_id]["progress"] = 30
@@ -347,7 +373,6 @@ async def process_file_task(task_id: str, contents: bytes, is_csv: bool, is_pdf:
                 if streak >= 3:
                     rapid_warnings += 1
 
-        user_keywords = [k.strip().lower() for k in keywords.split(',') if k.strip()]
 
         # AI Contextual Assessment
         ai_assessments = ["AI Pending"] * len(df)
@@ -538,19 +563,11 @@ async def process_file_task(task_id: str, contents: bytes, is_csv: bool, is_pdf:
 
             severity_counts = {
                 "Severe": 0, "Suspicious": 0, "Slight": 0, 
-                "Text": 0, "Clean": 0, "AI Fraud": 0
+                "Clean": 0, "AI Fraud": 0
             }
 
             for row in range(2, len(df) + 2):
                 row_severity = "Clean"
-                
-                for col_idx in text_cols:
-                    cell = worksheet.cell(row=row, column=col_idx)
-                    if isinstance(cell.value, str):
-                        if any(k in cell.value.lower() for k in user_keywords):
-                            cell.fill = red_fill
-                            cell.font = red_font
-                            row_severity = "Text"
                 
                 for col_idx in numeric_cols:
                     cell = worksheet.cell(row=row, column=col_idx)
@@ -646,7 +663,7 @@ async def process_file_task(task_id: str, contents: bytes, is_csv: bool, is_pdf:
                 dashboard[f'{col}9'].alignment = Alignment(horizontal="center", vertical="center")
                 dashboard[f'{col}9'].border = thin_border
                 
-            categories = ["Severe", "Suspicious", "Slight", "Text", "AI Fraud", "Clean"]
+            categories = ["Severe", "Suspicious", "Slight", "AI Fraud", "Clean"]
             for i, cat in enumerate(categories):
                 row = 10 + i
                 count = severity_counts[cat]
@@ -790,10 +807,28 @@ from fastapi import Request
 
 @app.get("/user/me")
 def get_user_me(current_user: User = Depends(get_current_user)):
+    import datetime
+    tier = current_user.subscription_tier or 'free'
+    if tier == 'free':
+        limit = 100
+    elif tier == 'budget':
+        limit = 1000
+    elif tier == 'pro':
+        limit = 5000
+    else:
+        limit = 'Unlimited'
+        
+    now = datetime.datetime.now()
+    if not current_user.last_reset_date or current_user.last_reset_date.month != now.month or current_user.last_reset_date.year != now.year:
+        usage = 0
+    else:
+        usage = current_user.rows_processed_this_month
+        
     return {
         "email": current_user.email,
-        "credits": current_user.credits,
-        "plan": current_user.subscription_tier
+        "rows_processed_this_month": usage,
+        "limit": limit,
+        "plan": tier
     }
 
 class CheckoutRequest(BaseModel):
@@ -870,15 +905,16 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
         
         # When checkout completes, we get client_reference_id and metadata directly
         if event['type'] == 'checkout.session.completed':
+            import datetime
             user_id = obj.get("client_reference_id")
             tier = obj.get("metadata", {}).get("tier")
-            credits_to_set = int(obj.get("metadata", {}).get("credits", 0))
             
-            if user_id and credits_to_set > 0:
+            if user_id and tier:
                 user = db.query(User).filter(User.id == int(user_id)).first()
                 if user:
-                    user.credits = credits_to_set
                     user.subscription_tier = tier
+                    user.rows_processed_this_month = 0
+                    user.last_reset_date = datetime.datetime.now()
                     db.add(ProcessedEvent(id=event_id))
                     db.commit()
                     print(f"Activated {tier} plan for User {user.id}")
