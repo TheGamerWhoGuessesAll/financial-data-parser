@@ -533,7 +533,7 @@ body {
 /* Legal Content */
 .legal-content {
     padding: 60px 10%;
-    color: white;
+    color: var(--text);
     max-width: 800px;
     margin: 0 auto;
     min-height: 60vh;
@@ -542,9 +542,15 @@ body {
     font-size: 36px;
     margin-bottom: 20px;
 }
-.legal-content p {
+.legal-content p, .legal-content ul, .legal-content li {
     line-height: 1.6;
-    color: #ccc;
+    color: var(--text-light);
+    margin-bottom: 15px;
+}
+.legal-content h2 {
+    margin-top: 30px;
+    margin-bottom: 15px;
+    color: var(--text);
 }
 
 /* Refactored Styles */
