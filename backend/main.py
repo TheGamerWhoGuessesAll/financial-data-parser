@@ -5,6 +5,7 @@ import uuid
 import asyncio
 import pandas as pd
 import pdfplumber
+from fastapi.responses import RedirectResponse
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, BackgroundTasks, Depends, Request
 from fastapi.responses import StreamingResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
@@ -723,6 +724,8 @@ async def process_file_task(task_id: str, contents: bytes, is_csv: bool, is_pdf:
 
 import secrets
 import urllib.request
+import httpx
+import secrets
 import json
 
 class ForgotPasswordRequest(BaseModel):
