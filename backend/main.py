@@ -807,7 +807,7 @@ from fastapi import Request
 
 @app.get("/user/me")
 def get_user_me(current_user: User = Depends(get_current_user)):
-        tier = current_user.subscription_tier or 'free'
+    tier = current_user.subscription_tier or 'free'
     if tier == 'free':
         limit = 100
     elif tier == 'budget':
@@ -904,7 +904,7 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
         
         # When checkout completes, we get client_reference_id and metadata directly
         if event['type'] == 'checkout.session.completed':
-                        user_id = obj.get("client_reference_id")
+            user_id = obj.get("client_reference_id")
             tier = obj.get("metadata", {}).get("tier")
             
             if user_id and tier:
