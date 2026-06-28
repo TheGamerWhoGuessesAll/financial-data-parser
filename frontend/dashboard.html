@@ -22,11 +22,19 @@
         <nav class="sub-nav">
             <div class="sub-logo" style="font-size: 16px; font-weight: normal; color: #aaa;">Workspace / Data Parser</div>
             <div class="user-profile" style="display: flex; align-items: center; gap: 15px;">
-            <div id="creditDisplay" style="font-size: 14px; font-weight: bold;">Usage: -- / --</div>
-            <a href="pricing.html" id="upgradeBtn" style="background: var(--primary); color: white; text-decoration: none; padding: 6px 12px; border-radius: 4px; font-size: 13px; font-weight: bold;">Upgrade to Pro</a>
+            <div style="display: flex; flex-direction: column; gap: 4px;">
+                <div id="creditDisplay" style="font-size: 14px; font-weight: bold;">Usage: -- / --</div>
+                <div style="width: 120px; height: 6px; background: #333; border-radius: 3px; overflow: hidden;">
+                    <div id="usageBar" style="width: 0%; height: 100%; background: var(--primary); transition: width 0.3s ease;"></div>
+                </div>
+            </div>
+            <a href="pricing.html" id="upgradeBtn" style="background: var(--primary); color: white; text-decoration: none; padding: 6px 12px; border-radius: 4px; font-size: 13px; font-weight: bold;">Upgrade Plan</a>
             <button id="logoutBtn" style="background: transparent; border: 1px solid #444; color: var(--text-light); cursor: pointer; padding: 6px 12px; border-radius: 4px; font-size: 13px;">Logout</button>
         </div>
         </nav>
+        <div id="successBanner" style="display: none; background: #059669; color: white; text-align: center; padding: 10px; font-weight: bold; font-size: 14px;">
+            Payment Successful! Your subscription tier has been upgraded.
+        </div>
         
         <div class="container" style="margin-top: 40px;">
             <h1 style="color: var(--text);">Data Parser</h1>
