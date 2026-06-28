@@ -394,8 +394,16 @@ async def process_file_task(task_id: str, contents: bytes, is_csv: bool, is_pdf:
                 for col in df.columns:
                     if pd.api.types.is_numeric_dtype(df[col]) and amt_col is None:
                         amt_col = col
+                for col in df.columns:
                     if (pd.api.types.is_string_dtype(df[col]) or pd.api.types.is_object_dtype(df[col])) and date_col != col:
-                        desc_col = col
+                        if 'desc' in str(col).lower() or 'name' in str(col).lower() or 'merchant' in str(col).lower():
+                            desc_col = col
+                            break
+                if desc_col is None:
+                    for col in df.columns:
+                        if (pd.api.types.is_string_dtype(df[col]) or pd.api.types.is_object_dtype(df[col])) and date_col != col:
+                            desc_col = col
+                            break
                 
                 if desc_col and amt_col:
                     batch_data = []
@@ -617,7 +625,10 @@ async def process_file_task(task_id: str, contents: bytes, is_csv: bool, is_pdf:
             title_cell.font = Font(size=18, bold=True, color="FF2F5597")
             
             warning_cell = dashboard['C1']
-            warning_cell.value = "(Note: May be inaccurate for small datasets)"
+            warning_text = "(Note: May be inaccurate for small datasets)"
+            if not date_col:
+                warning_text += " | WARNING: No Date/Time column found. Time-based anomalies disabled."
+            warning_cell.value = warning_text
             warning_cell.font = Font(size=10, italic=True, color="FFFF0000")
             
             total_rows = len(df)
@@ -840,8 +851,9 @@ def create_checkout_session(req: CheckoutRequest, current_user: User = Depends(g
         raise HTTPException(status_code=500, detail="Stripe API keys are not configured on this server.")
         
     prices = {
-        "basic": {"price": 999, "credits": 10, "name": "Basic Plan (10 Reports/mo)"},
-        "pro": {"price": 2999, "credits": 50, "name": "Pro Plan (50 Reports/mo)"}
+        "budget": {"price": 500, "name": "Budget Tier (1,000 Rows/mo)"},
+        "pro": {"price": 1500, "name": "Pro Tier (5,000 Rows/mo)"},
+        "unlimited": {"price": 2900, "name": "Unlimited Tier"}
     }
     
     if req.package not in prices:
@@ -868,7 +880,7 @@ def create_checkout_session(req: CheckoutRequest, current_user: User = Depends(g
             success_url="https://financial-data-parser.onrender.com/dashboard.html?payment=success",
             cancel_url="https://financial-data-parser.onrender.com/pricing.html?payment=cancelled",
             client_reference_id=str(current_user.id),
-            metadata={"tier": req.package, "credits": pkg['credits']}
+            metadata={"tier": req.package}
         )
         return {"checkout_url": session.url}
     except Exception as e:
