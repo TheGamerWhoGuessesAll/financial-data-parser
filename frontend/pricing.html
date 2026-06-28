@@ -21,32 +21,54 @@
         <h1 style="color: white; font-size: 36px; margin-bottom: 10px;">Subscribe to FinParse</h1>
         <p style="font-size: 16px; margin-bottom: 50px;">Subscribe to a monthly plan for guaranteed recurring audits.</p>
         
-        <div style="display: flex; gap: 30px; justify-content: center; flex-wrap: wrap;">
-            <!-- 1 Credit Package -->
-            <div class="auth-box" style="width: 300px; text-align: left; position: relative;">
-                <h3 style="color: white; font-size: 20px; margin-top: 0;">Single Report</h3>
-                <div style="font-size: 36px; color: white; font-weight: bold; margin: 15px 0;">$4.99</div>
-                <p style="font-size: 14px; margin-bottom: 30px;">Perfect for a one-time financial audit.</p>
-                <ul style="list-style: none; padding: 0; margin-bottom: 30px; font-size: 14px;">
-                    <li style="margin-bottom: 10px;">✓ 1 Data Extraction</li>
+        <div style="display: flex; gap: 20px; justify-content: center; flex-wrap: wrap; margin-bottom: 30px;">
+            <!-- Free Tier -->
+            <div class="auth-box" style="width: 220px; text-align: left; position: relative;">
+                <h3 style="color: white; font-size: 20px; margin-top: 0;">Free Tier</h3>
+                <div style="font-size: 36px; color: white; font-weight: bold; margin: 15px 0;">$0<span style="font-size: 14px; font-weight: normal; color: #888;">/mo</span></div>
+                <p style="font-size: 14px; margin-bottom: 20px;">Perfect for a small test.</p>
+                <ul style="list-style: none; padding: 0; margin-bottom: 30px; font-size: 13px;">
+                    <li style="margin-bottom: 10px;">✓ 100 Rows/Pages</li>
                     <li style="margin-bottom: 10px;">✓ Full Anomaly Report</li>
-                    <li style="margin-bottom: 10px;">✓ Excel Download</li>
                 </ul>
-                <button class="auth-btn checkout-btn" data-package="1_credit">Buy Now</button>
+                <button class="auth-btn" disabled style="background: #333; cursor: not-allowed;">Included</button>
             </div>
             
-            <!-- 5 Credit Package -->
-            <div class="auth-box" style="width: 300px; text-align: left; position: relative; border: 1px solid var(--primary);">
-                <div style="position: absolute; top: -12px; right: 20px; background: var(--primary); color: white; font-size: 12px; padding: 4px 10px; border-radius: 20px; font-weight: bold;">BEST VALUE</div>
-                <h3 style="color: white; font-size: 20px; margin-top: 0;">Pro Bundle</h3>
-                <div style="font-size: 36px; color: white; font-weight: bold; margin: 15px 0;">$19.99</div>
-                <p style="font-size: 14px; margin-bottom: 30px;">Save 20% on 5 complete statement audits.</p>
-                <ul style="list-style: none; padding: 0; margin-bottom: 30px; font-size: 14px;">
-                    <li style="margin-bottom: 10px;">✓ 5 Data Extractions</li>
-                    <li style="margin-bottom: 10px;">✓ Full Anomaly Reports</li>
-                    <li style="margin-bottom: 10px;">✓ Priority Support</li>
+            <!-- Budget Tier -->
+            <div class="auth-box" style="width: 220px; text-align: left; position: relative;">
+                <h3 style="color: white; font-size: 20px; margin-top: 0;">Budget</h3>
+                <div style="font-size: 36px; color: white; font-weight: bold; margin: 15px 0;">$5<span style="font-size: 14px; font-weight: normal; color: #888;">/mo</span></div>
+                <p style="font-size: 14px; margin-bottom: 20px;">Great for individuals.</p>
+                <ul style="list-style: none; padding: 0; margin-bottom: 30px; font-size: 13px;">
+                    <li style="margin-bottom: 10px;">✓ 1,000 Rows/Pages</li>
+                    <li style="margin-bottom: 10px;">✓ Full Anomaly Report</li>
                 </ul>
-                <button class="auth-btn checkout-btn" data-package="5_credits">Buy Now</button>
+                <button class="auth-btn checkout-btn" data-package="budget">Buy Now</button>
+            </div>
+            
+            <!-- Pro Tier -->
+            <div class="auth-box" style="width: 220px; text-align: left; position: relative; border: 1px solid var(--primary);">
+                <div style="position: absolute; top: -12px; right: 20px; background: var(--primary); color: white; font-size: 12px; padding: 4px 10px; border-radius: 20px; font-weight: bold;">POPULAR</div>
+                <h3 style="color: white; font-size: 20px; margin-top: 0;">Pro</h3>
+                <div style="font-size: 36px; color: white; font-weight: bold; margin: 15px 0;">$15<span style="font-size: 14px; font-weight: normal; color: #888;">/mo</span></div>
+                <p style="font-size: 14px; margin-bottom: 20px;">Ideal for small businesses.</p>
+                <ul style="list-style: none; padding: 0; margin-bottom: 30px; font-size: 13px;">
+                    <li style="margin-bottom: 10px;">✓ 5,000 Rows/Pages</li>
+                    <li style="margin-bottom: 10px;">✓ Full Anomaly Report</li>
+                </ul>
+                <button class="auth-btn checkout-btn" data-package="pro">Buy Now</button>
+            </div>
+            
+            <!-- Unlimited Tier -->
+            <div class="auth-box" style="width: 220px; text-align: left; position: relative;">
+                <h3 style="color: white; font-size: 20px; margin-top: 0;">Unlimited</h3>
+                <div style="font-size: 36px; color: white; font-weight: bold; margin: 15px 0;">$29<span style="font-size: 14px; font-weight: normal; color: #888;">/mo</span></div>
+                <p style="font-size: 14px; margin-bottom: 20px;">For heavy power users.</p>
+                <ul style="list-style: none; padding: 0; margin-bottom: 30px; font-size: 13px;">
+                    <li style="margin-bottom: 10px;">✓ Infinite Rows/Pages</li>
+                    <li style="margin-bottom: 10px;">✓ Full Anomaly Report</li>
+                </ul>
+                <button class="auth-btn checkout-btn" data-package="unlimited">Buy Now</button>
             </div>
         </div>
         
