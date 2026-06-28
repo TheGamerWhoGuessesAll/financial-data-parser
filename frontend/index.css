@@ -306,11 +306,11 @@ body {
     padding: 12px;
     margin-bottom: 15px;
     border-radius: 8px;
-    border: 1px solid #444;
+    border: 1px solid #cbd5e1;
     box-sizing: border-box;
     font-family: inherit;
-    background: #111;
-    color: white;
+    background: #ffffff;
+    color: var(--text);
 }
 .auth-btn {
     width: 100%;
@@ -365,8 +365,8 @@ body {
     background: var(--bg-dark);
     border-radius: 12px;
     padding: 40px;
-    border: 1px solid #333;
-    box-shadow: 0 20px 40px rgba(0,0,0,0.5);
+    border: 1px solid #e2e8f0;
+    box-shadow: 0 20px 40px rgba(0,0,0,0.1);
     width: 100%;
     max-width: 400px;
 }
@@ -374,7 +374,7 @@ body {
     margin-top: 0;
     margin-bottom: 10px;
     text-align: center;
-    color: white;
+    color: var(--text);
 }
 
 /* Footer Styles */
