@@ -8,9 +8,16 @@ document.addEventListener('DOMContentLoaded', () => {
     // Check URL for OAuth token
     const urlParams = new URLSearchParams(window.location.search);
     const oauthToken = urlParams.get('token');
+    const paymentSuccess = urlParams.get('success');
+    
     if (oauthToken) {
         localStorage.setItem('access_token', oauthToken);
-        // Remove token from URL for security and cleanliness
+        window.history.replaceState({}, document.title, window.location.pathname);
+    }
+    
+    if (paymentSuccess) {
+        const banner = document.getElementById('successBanner');
+        if (banner) banner.style.display = 'block';
         window.history.replaceState({}, document.title, window.location.pathname);
     }
 
@@ -41,6 +48,20 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (creditEl) {
                     let limitText = data.limit === 'Unlimited' ? '∞' : data.limit;
                     creditEl.innerText = `Usage: ${data.rows_processed_this_month} / ${limitText} rows`;
+                    
+                    const usageBar = document.getElementById('usageBar');
+                    if (usageBar) {
+                        if (data.limit === 'Unlimited') {
+                            usageBar.style.width = '100%';
+                            usageBar.style.background = '#10b981';
+                        } else {
+                            let pct = (data.rows_processed_this_month / data.limit) * 100;
+                            if (pct > 100) pct = 100;
+                            usageBar.style.width = `${pct}%`;
+                            if (pct > 90) usageBar.style.background = '#ef4444';
+                            else usageBar.style.background = 'var(--primary)';
+                        }
+                    }
                 }
                 const upgradeBtn = document.getElementById('upgradeBtn');
                 if (upgradeBtn && data.plan === 'unlimited') {
