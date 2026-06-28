@@ -897,13 +897,6 @@ def reset_db():
     Base.metadata.create_all(bind=engine)
     return {"status": "Database has been completely reset to the new schema!"}
 
-import os
-if os.path.exists("frontend"):
-    app.mount("/", StaticFiles(directory="frontend", html=True), name="frontend")
-elif os.path.exists("../frontend"):
-    app.mount("/", StaticFiles(directory="../frontend", html=True), name="frontend")
-
-
 # --- GOOGLE OAUTH ---
 import secrets
 import httpx
@@ -979,3 +972,9 @@ async def auth_google_callback(code: str, db: Session = Depends(get_db)):
         
         # 5. Redirect back to frontend dashboard with token in URL (frontend JS will catch and save it)
         return RedirectResponse(url=f'https://financial-data-parser.onrender.com/dashboard.html?token={jwt_token}')
+
+import os
+if os.path.exists("frontend"):
+    app.mount("/", StaticFiles(directory="frontend", html=True), name="frontend")
+elif os.path.exists("../frontend"):
+    app.mount("/", StaticFiles(directory="../frontend", html=True), name="frontend")
