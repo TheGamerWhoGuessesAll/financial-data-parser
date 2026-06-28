@@ -3,6 +3,7 @@ import os
 import json
 import uuid
 import asyncio
+import re
 import pandas as pd
 import pdfplumber
 from fastapi.responses import RedirectResponse
@@ -27,6 +28,44 @@ from openpyxl.utils import get_column_letter
 from openpyxl.styles import PatternFill, Font, Alignment, Border, Side
 from openpyxl.chart import PieChart3D, Reference
 from openpyxl.chart.label import DataLabelList
+
+
+POLICY_THRESHOLDS = {
+    "food": 50,
+    "meals": 50,
+    "fast food": 50,
+    "restaurants": 50,
+    "coffee": 20,
+    "travel": 1000,
+    "airlines": 1000,
+    "hotel": 500,
+    "software": 200,
+    "office supplies": 100,
+    "fuel": 100,
+    "gas station": 100,
+    "entertainment": 0,
+}
+
+JSON_PATTERN = re.compile(r'\{.*\}', re.DOTALL)
+
+def apply_policy_rules(category, amount):
+    if amount is None:
+        return "Requires Review: Invalid amount"
+        
+    if isinstance(amount, str):
+        amount = amount.translate(str.maketrans('', '', '$,')).strip()
+        
+    try:
+        amount = float(amount)
+    except (ValueError, TypeError):
+        return "Requires Review: Invalid amount"
+        
+    category_str = str(category).strip() if category is not None else "Other"
+    threshold = POLICY_THRESHOLDS.get(category_str.lower(), 500)
+    
+    if amount > threshold:
+        return f"Requires Review: Amount {amount} exceeds {category_str} policy limit of {threshold}"
+    return "Compliant"
 
 app = FastAPI(title="Financial Data Parser")
 
@@ -453,16 +492,25 @@ async def process_file_task(task_id: str, contents: bytes, is_csv: bool, is_pdf:
                         nonlocal chunks_completed
                         async with semaphore:
                             prompt = f"""
-                            You are an expert fraud analyst. Analyze the following list of transactions.
-                            Identify any contextual anomalies. A contextual anomaly is:
-                            1. A transaction where the AMOUNT is highly unusual for the DESCRIPTION (e.g., spending $500 at a 'Candy Shop').
-                            2. A transaction where the DESCRIPTION is nonsensical, a single letter, or obviously fake (e.g., 'a', 'b', 'x', 'test').
+                            You are a data extraction assistant. Analyze the following list of transactions.
+                            Extract the Vendor Name, Amount, and Category for each transaction.
+                            The category MUST be one of the following ~50 categories:
+                            "Advertising", "Airlines", "Automotive", "Bakery", "Bank Fees", "Bookstores", "Car Rental",
+                            "Charity", "Clothing", "Coffee", "Consulting", "Convenience Store", "Cosmetics", "Coworking",
+                            "Delivery", "Department Store", "Education", "Electronics", "Entertainment", "Fast Food", 
+                            "Fitness", "Food", "Fuel", "Furniture", "Gas Station", "Groceries", "Hardware", "Health", 
+                            "Home Improvement", "Hotel", "Insurance", "Internet", "Legal", "Logistics", "Maintenance", 
+                            "Meals", "Medical", "Office Supplies", "Online Retail", "Parking", "Personal Care", "Pets", 
+                            "Pharmacy", "Postage", "Printing", "Public Transit", "Real Estate", "Restaurants", "Rideshare",
+                            "Software", "Sporting Goods", "Streaming", "Subscriptions", "Supermarket", "Taxis", "Telecommunications", 
+                            "Tolls", "Travel", "Utilities", "Wholesale", "Other".
                             
-                            You do NOT need to flag transactions just because the number is large (e.g. $2000 for 'Rent' is normal).
+                            Return a JSON object mapping the transaction 'id' to an object containing:
+                            - vendor: The extracted vendor name (string)
+                            - amount: The numeric amount (number)
+                            - category: The best-matching category from the list above (string)
                             
-                            Return a JSON object mapping the transaction 'id' to a string assessment. 
-                            If it's normal, map it to "Clean".
-                            If it's suspicious, map it to a short explanation like "Fraud: $500 is extremely high for a Candy Shop" or "Fraud: 'a' is a highly suspicious and nonsensical merchant name."
+                            Do not determine if a transaction is fraud or suspicious.
                             
                             Transactions:
                             {json.dumps(chunk)}
@@ -479,13 +527,24 @@ async def process_file_task(task_id: str, contents: bytes, is_csv: bool, is_pdf:
                                             response_mime_type="application/json",
                                         ),
                                     )
-                                    text = response.text
+                                    text = response.text.strip()
                                     if text.startswith("```json"):
-                                        text = text.replace("```json", "").replace("```", "").strip()
+                                        text = text[7:]
                                     elif text.startswith("```"):
-                                        text = text.replace("```", "").strip()
+                                        text = text[3:]
+                                    if text.endswith("```"):
+                                        text = text[:-3]
+                                    text = text.strip()
                                         
-                                    parsed = json.loads(text)
+                                    try:
+                                        parsed = json.loads(text)
+                                    except json.JSONDecodeError:
+                                        match = JSON_PATTERN.search(text)
+                                        if match:
+                                            parsed = json.loads(match.group(0))
+                                        else:
+                                            raise
+                                            
                                     if parsed is None:
                                         parsed = {}
                                         
@@ -518,10 +577,15 @@ async def process_file_task(task_id: str, contents: bytes, is_csv: bool, is_pdf:
                     results = await asyncio.gather(*tasks)
                     
                     for assessments in results:
-                        for idx_str, text in assessments.items():
+                        for idx_str, data in assessments.items():
                             idx_int = int(idx_str)
                             if 0 <= idx_int < len(ai_assessments):
-                                ai_assessments[idx_int] = text
+                                if isinstance(data, dict):
+                                    cat = data.get("category", "Other")
+                                    amt = data.get("amount", 0.0)
+                                    ai_assessments[idx_int] = apply_policy_rules(cat, amt)
+                                else:
+                                    ai_assessments[idx_int] = str(data)
                 else:
                     ai_assessments = ["Missing Amt/Desc Col"] * len(df)
             except Exception as e:
@@ -530,7 +594,7 @@ async def process_file_task(task_id: str, contents: bytes, is_csv: bool, is_pdf:
                     err_msg = e.message
                 ai_assessments = [f"AI Error (Outer): {type(e).__name__} - {err_msg}"] * len(df)
                 
-        df['AI Context Assessment'] = ai_assessments
+        df['Policy Assessment'] = ai_assessments
 
         TASK_STORE[task_id]["message"] = "Generating Excel Report..."
         TASK_STORE[task_id]["progress"] = 80
@@ -559,7 +623,7 @@ async def process_file_task(task_id: str, contents: bytes, is_csv: bool, is_pdf:
             max_row = len(df) + 1
             worksheet.auto_filter.ref = f"A1:{max_col_letter}{max_row}"
             
-            ai_col_idx = df.columns.get_loc('AI Context Assessment') + 1
+            ai_col_idx = df.columns.get_loc('Policy Assessment') + 1
             
             for idx, col in enumerate(df.columns):
                 max_len = max(df[col].astype(str).map(len).max(), len(str(col))) + 2
@@ -569,7 +633,7 @@ async def process_file_task(task_id: str, contents: bytes, is_csv: bool, is_pdf:
             text_cols = []
             stats = {}
             for idx, col in enumerate(df.columns):
-                if col == 'AI Context Assessment':
+                if col == 'Policy Assessment':
                     continue
                 if pd.api.types.is_numeric_dtype(df[col]):
                     numeric_cols.append(idx + 1)
@@ -595,7 +659,7 @@ async def process_file_task(task_id: str, contents: bytes, is_csv: bool, is_pdf:
 
             severity_counts = {
                 "Severe": 0, "Suspicious": 0, "Slight": 0, 
-                "Clean": 0, "AI Fraud": 0
+                "Clean": 0, "Policy Violation": 0
             }
 
             for row in range(2, len(df) + 2):
@@ -626,13 +690,13 @@ async def process_file_task(task_id: str, contents: bytes, is_csv: bool, is_pdf:
                 # AI Check
                 ai_cell = worksheet.cell(row=row, column=ai_col_idx)
                 ai_val = str(ai_cell.value).lower()
-                is_normal = "clean" in ai_val or "missing" in ai_val or "disabled" in ai_val or "error" in ai_val
+                is_normal = "compliant" in ai_val or "missing" in ai_val or "disabled" in ai_val or "error" in ai_val
                 
                 if not is_normal:
                     ai_cell.fill = purple_fill
                     ai_cell.font = purple_font
                     if row_severity == "Clean" or row_severity == "Slight":
-                        row_severity = "AI Fraud"
+                        row_severity = "Policy Violation"
                         
                 severity_counts[row_severity] += 1
 
@@ -669,8 +733,8 @@ async def process_file_task(task_id: str, contents: bytes, is_csv: bool, is_pdf:
             dashboard['B5'] = f"{pct_anomalies:.1f}%"
             dashboard['A6'] = "Rapid Successions (Warnings):"
             dashboard['B6'] = rapid_warnings
-            dashboard['A7'] = "AI Context Anomalies:"
-            dashboard['B7'] = severity_counts["AI Fraud"]
+            dashboard['A7'] = "Policy Violations:"
+            dashboard['B7'] = severity_counts["Policy Violation"]
 
             for r in range(3, 8):
                 dashboard[f'A{r}'].font = Font(bold=True)
@@ -682,7 +746,7 @@ async def process_file_task(task_id: str, contents: bytes, is_csv: bool, is_pdf:
                     color = "FF9C0006" if rapid_warnings > 0 else "FF006100"
                     dashboard[f'B{r}'].font = Font(bold=True, color=color)
                 elif r == 7:
-                    color = "FF333399" if severity_counts["AI Fraud"] > 0 else "FF006100"
+                    color = "FF333399" if severity_counts["Policy Violation"] > 0 else "FF006100"
                     dashboard[f'B{r}'].font = Font(bold=True, color=color)
                 else:
                     dashboard[f'B{r}'].font = Font(bold=True)
@@ -700,7 +764,7 @@ async def process_file_task(task_id: str, contents: bytes, is_csv: bool, is_pdf:
                 dashboard[f'{col}9'].alignment = Alignment(horizontal="center", vertical="center")
                 dashboard[f'{col}9'].border = thin_border
                 
-            categories = ["Severe", "Suspicious", "Slight", "AI Fraud", "Clean"]
+            categories = ["Severe", "Suspicious", "Slight", "Policy Violation", "Clean"]
             for i, cat in enumerate(categories):
                 row = 10 + i
                 count = severity_counts[cat]
