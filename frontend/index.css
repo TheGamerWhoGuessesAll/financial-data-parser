@@ -332,25 +332,28 @@ body {
     min-height: 100vh;
 }
 .container {
-    background: var(--bg-dark);
+    background: var(--bg-darker);
     border-radius: 16px;
     padding: 40px;
-    border: 1px solid #333;
+    border: 1px solid #e2e8f0;
     text-align: center;
     max-width: 500px;
     margin: 0 auto;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.05);
 }
 .dropzone {
-    border: 2px dashed #444;
+    border: 2px dashed #cbd5e1;
     border-radius: 12px;
     padding: 50px 20px;
     cursor: pointer;
-    background: #111;
+    background: #f8fafc;
     position: relative;
+    color: var(--text-light);
+    transition: all 0.2s;
 }
 .dropzone:hover {
     border-color: var(--primary);
-    background: #1a1a1a;
+    background: #f1f5f9;
 }
 .icon { font-size: 48px; margin-bottom: 15px; }
 .hidden-input { display: none; }
