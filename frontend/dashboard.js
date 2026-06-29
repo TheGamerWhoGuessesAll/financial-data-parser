@@ -44,6 +44,47 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (planEl) {
                     const planName = data.plan.charAt(0).toUpperCase() + data.plan.slice(1);
                     planEl.innerText = `Plan: ${planName}`;
+                    
+                    if (['budget', 'pro', 'unlimited'].includes(data.plan)) {
+                        const optCsv = document.getElementById('optCsv');
+                        if (optCsv) {
+                            optCsv.disabled = false;
+                            optCsv.innerText = 'CSV';
+                        }
+                    }
+                    if (['pro', 'unlimited'].includes(data.plan)) {
+                        const chkPriority = document.getElementById('chkPriority');
+                        const badgePriority = document.getElementById('badgePriority');
+                        const badgeRules = document.getElementById('badgeRules');
+                        const btnRules = document.getElementById('btnRules');
+                        if (chkPriority) chkPriority.disabled = false;
+                        if (btnRules) {
+                            btnRules.disabled = false;
+                            btnRules.style.background = 'var(--primary)';
+                            btnRules.style.color = 'white';
+                            btnRules.style.cursor = 'pointer';
+                        }
+                        [badgePriority, badgeRules].forEach(b => {
+                            if (b) {
+                                b.style.background = 'var(--primary)';
+                                b.style.color = 'white';
+                            }
+                        });
+                    }
+                    if (data.plan === 'unlimited') {
+                        const badgeApi = document.getElementById('badgeApi');
+                        const btnApi = document.getElementById('btnApi');
+                        if (badgeApi) {
+                            badgeApi.style.background = 'var(--primary)';
+                            badgeApi.style.color = 'white';
+                        }
+                        if (btnApi) {
+                            btnApi.disabled = false;
+                            btnApi.style.background = 'var(--primary)';
+                            btnApi.style.color = 'white';
+                            btnApi.style.cursor = 'pointer';
+                        }
+                    }
                 }
                 if (creditEl) {
                     let limitText = data.limit === 'Unlimited' ? '∞' : data.limit;
@@ -227,7 +268,8 @@ document.addEventListener('DOMContentLoaded', () => {
                         
                         setTimeout(async () => {
                             try {
-                                const downloadRes = await fetch(`${baseUrl}/download/${currentTaskId}`, {
+                                const format = document.getElementById('exportFormat') ? document.getElementById('exportFormat').value : 'excel';
+                                const downloadRes = await fetch(`${baseUrl}/download/${currentTaskId}?format=${format}`, {
                                     headers: {
                                         'Authorization': `Bearer ${token}`
                                     }
@@ -241,7 +283,7 @@ document.addEventListener('DOMContentLoaded', () => {
                                 link.href = url;
                                 // We can try to extract the filename from the Content-Disposition header if needed,
                                 // but for simplicity, we can default it.
-                                link.download = 'anomalies.xlsx';
+                                link.download = format === 'csv' ? 'anomalies.csv' : 'anomalies.xlsx';
                                 document.body.appendChild(link);
                                 link.click();
                                 document.body.removeChild(link);
