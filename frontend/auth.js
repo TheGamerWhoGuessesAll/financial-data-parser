@@ -1,10 +1,8 @@
-
 const baseUrl = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' 
     ? 'http://127.0.0.1:8000' 
     : 'https://financial-data-parser.onrender.com';
 
 document.addEventListener('DOMContentLoaded', () => {
-    // If already logged in, redirect to dashboard immediately
     if (localStorage.getItem('access_token')) {
         window.location.href = 'dashboard.html';
         return;
@@ -15,7 +13,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const passwordInput = document.getElementById('authPassword');
     const authStatus = document.getElementById('authStatus');
 
-    // Get mode from script tag data attribute (login or signup)
     const scriptTag = document.querySelector('script[data-mode]');
     const mode = scriptTag ? scriptTag.getAttribute('data-mode') : 'login';
 
@@ -34,7 +31,7 @@ document.addEventListener('DOMContentLoaded', () => {
             authStatus.innerText = '';
 
             try {
-                const response = await fetch(`${baseUrl}/${mode}`, {
+                const response = await fetch(${baseUrl}/, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ email, password })
@@ -43,8 +40,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 const data = await response.json();
 
                 if (response.ok) {
-                    localStorage.setItem('access_token', data.access_token);
-                    window.location.href = 'dashboard.html';
+                    if (mode === 'signup') {
+                        authStatus.style.color = '#22c55e';
+                        authStatus.innerText = data.message || 'Please check your email to verify your account.';
+                        authBtn.disabled = false;
+                        authBtn.innerText = 'Email Sent!';
+                    } else {
+                        localStorage.setItem('access_token', data.access_token);
+                        window.location.href = 'dashboard.html';
+                    }
                 } else {
                     authStatus.innerText = data.detail || 'Authentication failed.';
                     authBtn.disabled = false;
@@ -57,7 +61,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     }
-    // Forgot Password Logic
+
     const forgotPasswordLink = document.getElementById('forgotPasswordLink');
     const forgotPasswordModal = document.getElementById('forgotPasswordModal');
     const resetEmailInput = document.getElementById('resetEmailInput');
@@ -85,7 +89,7 @@ document.addEventListener('DOMContentLoaded', () => {
             resetStatus.innerText = '';
 
             try {
-                const response = await fetch(`${baseUrl}/forgot-password`, {
+                const response = await fetch(${baseUrl}/forgot-password, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ email })
