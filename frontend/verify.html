@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Verify Account | FinParse</title>
+    <link rel="stylesheet" href="index.css?v=5">
+</head>
+<body style="display: flex; align-items: center; justify-content: center; min-height: 100vh;">
+    <div class="auth-box">
+        <a href="index.html" style="text-decoration: none; display: flex; align-items: center; justify-content: center; margin-bottom: 20px; font-size: 24px; color: var(--text); font-weight: bold;">
+            <span class="logo-icon" style="padding: 4px 10px;">_</span> FINPARSE
+        </a>
+        <h2 style="color: var(--text); text-align: center;">Verifying Email</h2>
+        <div id="verifyStatus" style="margin-top: 15px; font-size: 14px; text-align: center; color: var(--text-light);">Connecting to server...</div>
+    </div>
+    <script>
+        const baseUrl = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' 
+            ? 'http://127.0.0.1:8000' 
+            : 'https://financial-data-parser.onrender.com';
+            
+        document.addEventListener('DOMContentLoaded', async () => {
+            const urlParams = new URLSearchParams(window.location.search);
+            const token = urlParams.get('token');
+            const verifyStatus = document.getElementById('verifyStatus');
+            
+            if (!token) {
+                verifyStatus.style.color = '#ef4444';
+                verifyStatus.innerText = 'Invalid or missing verification token.';
+                return;
+            }
+            
+            try {
+                const response = await fetch(`${baseUrl}/verify`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ token })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    verifyStatus.style.color = '#22c55e';
+                    verifyStatus.innerText = 'Email successfully verified! Redirecting to login...';
+                    setTimeout(() => window.location.href = 'login.html', 2000);
+                } else {
+                    verifyStatus.style.color = '#ef4444';
+                    verifyStatus.innerText = data.detail || 'Failed to verify email.';
+                }
+            } catch (e) {
+                verifyStatus.style.color = '#ef4444';
+                verifyStatus.innerText = 'Network error. Please try again.';
+            }
+        });
+    </script>
+</body>
+</html>
