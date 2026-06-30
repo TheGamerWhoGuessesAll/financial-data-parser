@@ -118,8 +118,17 @@ class User(Base):
     rows_processed_this_month = Column(Integer, default=0)
     last_reset_date = Column(DateTime, default=None)
     subscription_tier = Column(String, default='free')
+    is_verified = Column(Boolean, default=False)
 
 Base.metadata.create_all(bind=engine)
+
+from sqlalchemy import text
+try:
+    with engine.connect() as conn:
+        conn.execute(text("ALTER TABLE users ADD COLUMN is_verified BOOLEAN DEFAULT FALSE"))
+        conn.commit()
+except Exception:
+    pass
 
 def get_db():
     db = SessionLocal()
@@ -182,19 +191,63 @@ limiter = Limiter(key_func=get_remote_address)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
-@app.post("/signup")
+@app.post("/register")
 @limiter.limit("5/minute")
 def signup(request: Request, user: UserCreate, db: Session = Depends(get_db)):
     db_user = db.query(User).filter(User.email == user.email).first()
     if db_user:
         raise HTTPException(status_code=400, detail="Email already registered")
     hashed_password = get_password_hash(user.password)
-    new_user = User(email=user.email, hashed_password=hashed_password)
+    new_user = User(email=user.email, hashed_password=hashed_password, is_verified=False)
     db.add(new_user)
     db.commit()
     db.refresh(new_user)
-    access_token = create_access_token(data={"sub": new_user.email})
-    return {"access_token": access_token, "token_type": "bearer"}
+    
+    token = create_access_token(data={"sub": new_user.email})
+    verify_link = f"https://financial-data-parser.onrender.com/verify.html?token={token}"
+    
+    resend_api_key = os.getenv("RESEND_API_KEY")
+    if resend_api_key:
+        try:
+            req_data = json.dumps({
+                "from": "onboarding@resend.dev",
+                "to": [user.email],
+                "subject": "Verify Your FinParse Account",
+                "html": f"<p>Welcome to FinParse!</p><p>Please click the link below to verify your email address:</p><p><a href='{verify_link}'>{verify_link}</a></p>"
+            }).encode('utf-8')
+            
+            headers = {
+                "Authorization": f"Bearer {resend_api_key}",
+                "Content-Type": "application/json"
+            }
+            
+            http_req = urllib.request.Request("https://api.resend.com/emails", data=req_data, headers=headers, method="POST")
+            urllib.request.urlopen(http_req)
+        except Exception as e:
+            print("Failed to send verification email:", e)
+            
+    return {"message": "Please check your email to verify your account before logging in."}
+
+class VerifyRequest(BaseModel):
+    token: str
+
+@app.post("/verify")
+def verify_account(req: VerifyRequest, db: Session = Depends(get_db)):
+    try:
+        payload = jwt.decode(req.token, SECRET_KEY, algorithms=[ALGORITHM])
+        email: str = payload.get("sub")
+        if email is None:
+            raise HTTPException(status_code=400, detail="Invalid token")
+    except jwt.PyJWTError:
+        raise HTTPException(status_code=400, detail="Invalid or expired token")
+        
+    user = db.query(User).filter(User.email == email).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+        
+    user.is_verified = True
+    db.commit()
+    return {"message": "Account successfully verified!"}
 
 @app.post("/login")
 @limiter.limit("5/minute")
@@ -203,6 +256,9 @@ def login(request: Request, user: UserLogin, db: Session = Depends(get_db)):
     
     if not db_user:
         raise HTTPException(status_code=401, detail="Incorrect email or password")
+        
+    if not db_user.is_verified:
+        raise HTTPException(status_code=403, detail="Please check your email and verify your account first.")
         
     if db_user.locked_until and db_user.locked_until > datetime.utcnow():
         raise HTTPException(status_code=403, detail=f"Account locked until {db_user.locked_until.strftime('%H:%M:%S')} UTC due to too many failed attempts.")
@@ -276,7 +332,7 @@ async def get_status(task_id: str, current_user: User = Depends(get_current_user
     }
 
 @app.get("/download/{task_id}")
-async def download_file(task_id: str, current_user: User = Depends(get_current_user)):
+async def download_file(task_id: str, format: str = "excel", current_user: User = Depends(get_current_user)):
     if task_id not in TASK_STORE or TASK_STORE[task_id].get("user_email") != current_user.email:
         raise HTTPException(status_code=404, detail="Task not found")
     
@@ -292,6 +348,18 @@ async def download_file(task_id: str, current_user: User = Depends(get_current_u
     excel_filename = f"{base_name}-Examination.xlsx"
     
     del TASK_STORE[task_id] # Clean up RAM
+    
+    if format == "csv" and current_user.package != "basic":
+        import pandas as pd
+        df = pd.read_excel(buffer, sheet_name="Anomaly Report")
+        csv_buffer = io.StringIO()
+        df.to_csv(csv_buffer, index=False)
+        csv_bytes = csv_buffer.getvalue().encode('utf-8')
+        return StreamingResponse(
+            io.BytesIO(csv_bytes),
+            media_type="text/csv",
+            headers={"Content-Disposition": f"attachment; filename={base_name}-Anomalies.csv"}
+        )
     
     return StreamingResponse(
         buffer,
@@ -883,7 +951,7 @@ def forgot_password(req: ForgotPasswordRequest, db: Session = Depends(get_db)):
     if resend_api_key:
         try:
             req_data = json.dumps({
-                "from": "support@finparse.dev",
+                "from": "onboarding@resend.dev",
                 "to": [user.email],
                 "subject": "Password Reset Request",
                 "html": f"<p>Click the link below to reset your password:</p><p><a href='{reset_link}'>{reset_link}</a></p><p>This link expires in 15 minutes.</p>"
