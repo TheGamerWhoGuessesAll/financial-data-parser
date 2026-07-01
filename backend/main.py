@@ -141,7 +141,8 @@ def get_db():
         db.close()
 
 # Auth Setup
-SECRET_KEY = os.environ["SECRET_KEY"]
+import secrets
+SECRET_KEY = os.getenv("SECRET_KEY", secrets.token_hex(32))
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7 # 7 days
 
