@@ -45,6 +45,9 @@ document.addEventListener('DOMContentLoaded', () => {
                     const planName = data.plan.charAt(0).toUpperCase() + data.plan.slice(1);
                     planEl.innerText = `Plan: ${planName}`;
                     
+                    const userEmailDisplay = document.getElementById('userEmailDisplay');
+                    if (userEmailDisplay) userEmailDisplay.innerText = data.email;
+                    
                     if (['budget', 'pro', 'unlimited'].includes(data.plan)) {
                         const optCsv = document.getElementById('optCsv');
                         if (optCsv) {
