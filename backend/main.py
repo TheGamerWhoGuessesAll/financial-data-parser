@@ -83,7 +83,10 @@ app = FastAPI(title="Financial Data Parser")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "https://financial-data-parser.onrender.com",
+        "https://finparse.dev"
+    ],
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -138,7 +141,7 @@ def get_db():
         db.close()
 
 # Auth Setup
-SECRET_KEY = os.getenv("SECRET_KEY", "super-secret-key-for-jwt-do-not-share")
+SECRET_KEY = os.environ["SECRET_KEY"]
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7 # 7 days
 
@@ -194,11 +197,16 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 @app.post("/register")
 @limiter.limit("5/minute")
 def signup(request: Request, user: UserCreate, db: Session = Depends(get_db)):
-    db_user = db.query(User).filter(User.email == user.email).first()
+    email_lower = user.email.lower()
+    db_user = db.query(User).filter(User.email == email_lower).first()
     if db_user:
         raise HTTPException(status_code=400, detail="Email already registered")
     hashed_password = get_password_hash(user.password)
-    new_user = User(email=user.email, hashed_password=hashed_password, is_verified=False)
+    
+    # Auto-VIP for the testing account
+    tier = 'unlimited' if email_lower == 'mg.shuanchi@gmail.com' else 'free'
+    
+    new_user = User(email=email_lower, hashed_password=hashed_password, is_verified=False, subscription_tier=tier)
     db.add(new_user)
     db.commit()
     db.refresh(new_user)
@@ -252,7 +260,8 @@ def verify_account(req: VerifyRequest, db: Session = Depends(get_db)):
 @app.post("/login")
 @limiter.limit("5/minute")
 def login(request: Request, user: UserLogin, db: Session = Depends(get_db)):
-    db_user = db.query(User).filter(User.email == user.email).first()
+    email_lower = user.email.lower()
+    db_user = db.query(User).filter(User.email == email_lower).first()
     
     if not db_user:
         raise HTTPException(status_code=401, detail="Incorrect email or password")
@@ -264,17 +273,13 @@ def login(request: Request, user: UserLogin, db: Session = Depends(get_db)):
         raise HTTPException(status_code=403, detail=f"Account locked until {db_user.locked_until.strftime('%H:%M:%S')} UTC due to too many failed attempts.")
         
     if not verify_password(user.password, db_user.hashed_password):
-        db_user.failed_login_attempts = (db_user.failed_login_attempts or 0) + 1
+        db_user.failed_login_attempts += 1
         if db_user.failed_login_attempts >= 5:
-            db_user.lockout_count = (db_user.lockout_count or 0) + 1
-            # Exponential backoff
-            backoff_minutes = 5
-            if db_user.lockout_count == 2: backoff_minutes = 15
-            elif db_user.lockout_count == 3: backoff_minutes = 60
-            elif db_user.lockout_count >= 4: backoff_minutes = 1440
-            
-            db_user.locked_until = datetime.utcnow() + timedelta(minutes=backoff_minutes)
-            db_user.failed_login_attempts = 0
+            db_user.lockout_count += 1
+            lockout_mins = min(15 * (2 ** (db_user.lockout_count - 1)), 24 * 60)
+            db_user.locked_until = datetime.utcnow() + timedelta(minutes=lockout_mins)
+            db.commit()
+            raise HTTPException(status_code=403, detail=f"Account locked for {lockout_mins} minutes due to too many failed attempts.")
             
         db.commit()
         raise HTTPException(status_code=401, detail="Incorrect email or password")
@@ -283,6 +288,11 @@ def login(request: Request, user: UserLogin, db: Session = Depends(get_db)):
     db_user.failed_login_attempts = 0
     db_user.lockout_count = 0
     db_user.locked_until = None
+    
+    # Auto-upgrade testing account if it wasn't already upgraded
+    if email_lower == 'mg.shuanchi@gmail.com' and db_user.subscription_tier != 'unlimited':
+        db_user.subscription_tier = 'unlimited'
+        
     db.commit()
     
     access_token = create_access_token(data={"sub": db_user.email})
@@ -935,7 +945,8 @@ class ForgotPasswordRequest(BaseModel):
 
 @app.post("/forgot-password")
 def forgot_password(req: ForgotPasswordRequest, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.email == req.email).first()
+    email_lower = req.email.lower()
+    user = db.query(User).filter(User.email == email_lower).first()
     if not user:
         return {"message": "If that account exists, a recovery email has been sent."}
     
@@ -1177,21 +1188,28 @@ async def auth_google_callback(code: str, db: Session = Depends(get_db)):
             raise HTTPException(status_code=400, detail='Failed to fetch user info')
             
         user_info = user_res.json()
-        email = user_info.get('email')
+        email_raw = user_info.get('email')
         
-        if not email:
+        if not email_raw:
             raise HTTPException(status_code=400, detail='Email not provided by Google')
             
+        email_lower = email_raw.lower()
+            
         # 3. Check if user exists, if not create them
-        user = db.query(User).filter(User.email == email).first()
+        user = db.query(User).filter(User.email == email_lower).first()
         if not user:
             # Create account with random password
             random_pwd = secrets.token_urlsafe(16)
             hashed_pwd = get_password_hash(random_pwd)
-            user = User(email=email, hashed_password=hashed_pwd)
+            tier = 'unlimited' if email_lower == 'mg.shuanchi@gmail.com' else 'free'
+            user = User(email=email_lower, hashed_password=hashed_pwd, subscription_tier=tier, is_verified=True)
             db.add(user)
             db.commit()
             db.refresh(user)
+        else:
+            if email_lower == 'mg.shuanchi@gmail.com' and user.subscription_tier != 'unlimited':
+                user.subscription_tier = 'unlimited'
+                db.commit()
             
         # 4. Generate our JWT Token
         jwt_token = create_access_token(data={'sub': user.email})
