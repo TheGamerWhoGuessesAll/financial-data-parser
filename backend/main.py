@@ -43,7 +43,7 @@ POLICY_THRESHOLDS = {
     "office supplies": 100,
     "fuel": 100,
     "gas station": 100,
-    "entertainment": 0,
+    "entertainment": 100,
 }
 
 JSON_PATTERN = re.compile(r'\{.*\}', re.DOTALL)
@@ -93,6 +93,13 @@ app.add_middleware(
     expose_headers=["Content-Disposition"],
 )
 
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    return response
 
 # Database Setup
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./test.db")
@@ -122,6 +129,8 @@ class User(Base):
     last_reset_date = Column(DateTime, default=None)
     subscription_tier = Column(String, default='free')
     is_verified = Column(Boolean, default=False)
+    api_key = Column(String, unique=True, nullable=True)
+    custom_rules = Column(String, nullable=True)
 
 Base.metadata.create_all(bind=engine)
 
@@ -129,6 +138,13 @@ from sqlalchemy import text
 try:
     with engine.connect() as conn:
         conn.execute(text("ALTER TABLE users ADD COLUMN is_verified BOOLEAN DEFAULT FALSE"))
+        conn.commit()
+except Exception:
+    pass
+try:
+    with engine.connect() as conn:
+        conn.execute(text("ALTER TABLE users ADD COLUMN api_key VARCHAR"))
+        conn.execute(text("ALTER TABLE users ADD COLUMN custom_rules VARCHAR"))
         conn.commit()
 except Exception:
     pass
@@ -318,6 +334,8 @@ async def upload_file(
     # Limit checking will happen in the background task to avoid blocking the HTTP response
     # Read the uploaded file
     contents = await file.read()
+    if len(contents) > 20 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="File too large. Maximum size is 20MB.")
     
     task_id = str(uuid.uuid4())
     TASK_STORE[task_id] = {
@@ -356,7 +374,7 @@ async def download_file(task_id: str, format: str = "excel", current_user: User 
     
     original_filename = task_data["filename"]
     base_name = original_filename.rsplit('.', 1)[0]
-    excel_filename = f"{base_name}-Examination.xlsx"
+    excel_filename = f"FINANCIAL REVIEW ON {base_name}.xlsx"
     
     del TASK_STORE[task_id] # Clean up RAM
     
@@ -1217,6 +1235,27 @@ async def auth_google_callback(code: str, db: Session = Depends(get_db)):
         
         # 5. Redirect back to frontend dashboard with token in URL (frontend JS will catch and save it)
         return RedirectResponse(url=f'https://financial-data-parser.onrender.com/dashboard.html?token={jwt_token}')
+
+class RulesRequest(BaseModel):
+    rules: str
+
+@app.post("/api/rules")
+def save_rules(req: RulesRequest, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if current_user.subscription_tier not in ["pro", "unlimited"]:
+        raise HTTPException(status_code=403, detail="Requires Pro+ plan")
+    current_user.custom_rules = req.rules
+    db.commit()
+    return {"message": "Custom rules saved successfully!"}
+
+@app.post("/api/generate-key")
+def generate_api_key(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if current_user.subscription_tier != "unlimited":
+        raise HTTPException(status_code=403, detail="Requires Unlimited plan")
+    import secrets
+    new_key = "fp_" + secrets.token_hex(16)
+    current_user.api_key = new_key
+    db.commit()
+    return {"api_key": new_key}
 
 import os
 if os.path.exists("frontend"):
