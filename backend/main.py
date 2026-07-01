@@ -198,6 +198,19 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
     return user
 
 # Pydantic Models
+from typing import List
+
+class TransactionAssessment(BaseModel):
+    id: str
+    vendor: str
+    amount: float
+    category: str
+    is_suspicious: bool
+    suspicion_reason: str
+
+class BatchAssessment(BaseModel):
+    assessments: List[TransactionAssessment]
+
 class UserCreate(BaseModel):
     email: str
     password: str
@@ -454,10 +467,17 @@ async def process_file_task(task_id: str, contents: bytes, is_csv: bool, is_pdf:
         effective_rows = sum(max(1, len(str(row)) // 200) for _, row in df.iterrows())
         
         db = SessionLocal()
+        custom_rules_dict = {}
         try:
             user = db.query(User).filter(User.id == user_id).first()
             if not user:
                 raise ValueError("User not found")
+                
+            if user.custom_rules:
+                try:
+                    custom_rules_dict = json.loads(user.custom_rules)
+                except Exception:
+                    pass
                 
             # Check for monthly reset
             now = datetime.now()
@@ -596,9 +616,21 @@ async def process_file_task(task_id: str, contents: bytes, is_csv: bool, is_pdf:
                     async def process_chunk(chunk):
                         nonlocal chunks_completed
                         async with semaphore:
+                            
+                            chunk_vendors = " ".join([str(item["desc"]).lower() for item in chunk])
+                            relevant_rules = {}
+                            for vendor, cat in custom_rules_dict.items():
+                                if vendor.lower() in chunk_vendors:
+                                    relevant_rules[vendor] = cat
+                                    
+                            rules_prompt = ""
+                            if relevant_rules:
+                                rules_prompt = f"\n\nCRITICAL: You MUST apply the following custom user-defined categories. If a vendor matches, override your default category logic:\n{json.dumps(relevant_rules)}"
+                            
                             prompt = f"""
                             You are a data extraction assistant. Analyze the following list of transactions.
                             Extract the Vendor Name, Amount, Category, is_suspicious, and suspicion_reason for each transaction.
+                            
                             The category MUST be one of the following ~50 categories:
                             "Advertising", "Airlines", "Automotive", "Bakery", "Bank Fees", "Bookstores", "Car Rental",
                             "Charity", "Clothing", "Coffee", "Consulting", "Convenience Store", "Cosmetics", "Coworking",
@@ -610,14 +642,11 @@ async def process_file_task(task_id: str, contents: bytes, is_csv: bool, is_pdf:
                             "Software", "Sporting Goods", "Streaming", "Subscriptions", "Supermarket", "Taxis", "Telecommunications", 
                             "Tolls", "Travel", "Utilities", "Wholesale", "Other".
                             
-                            Return a JSON object mapping the transaction 'id' to an object containing:
-                            - vendor: The extracted vendor name (string)
-                            - amount: The numeric amount (number)
-                            - category: The best-matching category from the list above (string)
-                            - is_suspicious: evaluating if contextually it looks like fraud/unauthorized (boolean)
-                            - suspicion_reason: explaining why if true, otherwise empty (string)
-                            
-                            Evaluate the context, vendor name, and amount. Is this likely fraud, unauthorized, or highly suspicious? Set is_suspicious to true if so.
+                            EXAMPLES OF FRAUD / SUSPICIOUS BEHAVIOR (Few-Shot Calibration):
+                            - A corporate card charged $12 for "Netflix" or "Spotify" -> is_suspicious: true (Reason: Personal entertainment on company card)
+                            - A corporate card charged $12 for "FedEx" -> is_suspicious: false (Reason: Standard business shipping)
+                            - A charge for $5,000 at "Best Buy" when the typical amount is $50 -> is_suspicious: true (Reason: Unusually high electronics purchase)
+                            - A charge for "Bob's Casino" -> is_suspicious: true (Reason: Gambling on company ledger){rules_prompt}
                             
                             Transactions:
                             {json.dumps(chunk)}
@@ -632,27 +661,19 @@ async def process_file_task(task_id: str, contents: bytes, is_csv: bool, is_pdf:
                                         contents=prompt,
                                         config=types.GenerateContentConfig(
                                             response_mime_type="application/json",
+                                            response_schema=BatchAssessment,
                                         ),
                                     )
                                     text = response.text.strip()
-                                    if text.startswith("```json"):
-                                        text = text[7:]
-                                    elif text.startswith("```"):
-                                        text = text[3:]
-                                    if text.endswith("```"):
-                                        text = text[:-3]
-                                    text = text.strip()
-                                        
                                     try:
-                                        parsed = json.loads(text)
-                                    except json.JSONDecodeError:
-                                        match = JSON_PATTERN.search(text)
-                                        if match:
-                                            parsed = json.loads(match.group(0))
-                                        else:
-                                            raise
-                                            
-                                    if parsed is None:
+                                        raw_parsed = json.loads(text)
+                                        parsed = {}
+                                        for item in raw_parsed.get("assessments", []):
+                                            parsed[str(item["id"])] = item
+                                    except Exception:
+                                        parsed = {}
+                                        
+                                    if parsed is None or not parsed:
                                         parsed = {}
                                         
                                     chunks_completed += 1
