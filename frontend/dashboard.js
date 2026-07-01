@@ -66,6 +66,22 @@ document.addEventListener('DOMContentLoaded', () => {
                             btnRules.style.background = 'var(--primary)';
                             btnRules.style.color = 'white';
                             btnRules.style.cursor = 'pointer';
+                            
+                            btnRules.onclick = async () => {
+                                const rules = prompt("Enter your custom JSON rules (e.g. {'vendor': 'category'}):");
+                                if (rules) {
+                                    try {
+                                        const r = await fetch(`${baseUrl}/api/rules`, {
+                                            method: 'POST',
+                                            headers: {'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json'},
+                                            body: JSON.stringify({rules})
+                                        });
+                                        const resData = await r.json();
+                                        if(r.ok) alert("Rules saved!");
+                                        else alert("Error: " + resData.detail);
+                                    } catch(e) { alert("Network error"); }
+                                }
+                            };
                         }
                         [badgePriority, badgeRules].forEach(b => {
                             if (b) {
@@ -86,6 +102,18 @@ document.addEventListener('DOMContentLoaded', () => {
                             btnApi.style.background = 'var(--primary)';
                             btnApi.style.color = 'white';
                             btnApi.style.cursor = 'pointer';
+                            
+                            btnApi.onclick = async () => {
+                                try {
+                                    const r = await fetch(`${baseUrl}/api/generate-key`, {
+                                        method: 'POST',
+                                        headers: {'Authorization': `Bearer ${token}`}
+                                    });
+                                    const resData = await r.json();
+                                    if(r.ok) prompt("Your new API Key (copy this now, it won't be shown again):", resData.api_key);
+                                    else alert("Error: " + resData.detail);
+                                } catch(e) { alert("Network error"); }
+                            };
                         }
                     }
                 }
