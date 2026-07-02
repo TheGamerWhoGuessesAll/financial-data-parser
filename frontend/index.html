@@ -39,62 +39,44 @@
         <div class="hero">
             <div class="hero-content">
                 <div class="hero-tag">FinParse Pro</div>
-                <h1>Stop Out-of-Policy Employee Spending Before the Books Close.</h1>
-                <p>Upload your monthly expense files and let AI instantly catch hidden waste, unapproved purchases, and subscription creep—without digging through spreadsheets.</p>
+                <h1 style="font-size: 56px; line-height: 1.1; margin-bottom: 20px; font-weight: 800; color: var(--text);">Financial Exception<br>Detection, Automated.</h1>
+                <p style="font-size: 20px; color: var(--text-light); margin-bottom: 40px; max-width: 600px;">Automate your expense auditing. Upload your monthly statements to instantly identify policy violations, duplicate charges, and unusual spending patterns—without the manual spreadsheet review.</p>
                 <a href="signup.html" class="primary-cta">Start Free Trial (No Card Required)</a>
             </div>
             <div class="hero-visual">
                 <div class="sandbox-container">
-                    <button id="sandbox-btn">Click to Scan Sample Statement</button>
-                    <table class="sandbox-table">
+                    <button id="sandbox-btn" style="background: #10b981; color: #fff; border: none; padding: 12px 24px; border-radius: 6px; font-weight: bold; cursor: pointer; margin-bottom: 20px; font-size: 18px; width: 100%;">Click to Scan Sample Statement</button>
+                    <table class="sandbox-table" style="width: 100%; border-collapse: collapse; text-align: left; font-size: 14px; margin-top: 10px;">
                         <thead>
-                            <tr>
-                                <th>Date</th>
-                                <th>Vendor</th>
-                                <th>Amount</th>
-                                <th>Reason</th>
+                            <tr style="border-bottom: 1px solid var(--border); color: var(--text-light);">
+                                <th style="padding: 10px 5px;">Date</th>
+                                <th style="padding: 10px 5px;">Vendor</th>
+                                <th style="padding: 10px 5px;">Amount</th>
+                                <th style="padding: 10px 5px;">Reason</th>
                             </tr>
                         </thead>
                         <tbody id="sandbox-table-body">
                             <tr>
-                                <td>06/23/2026</td>
-                                <td>Office Supplies Co</td>
-                                <td>$15.00</td>
-                                <td>-</td>
+                                <td style="padding: 15px 5px;">06/23/2026</td>
+                                <td style="padding: 15px 5px;">Office Supplies Co</td>
+                                <td style="padding: 15px 5px;">$15.00</td>
+                                <td style="padding: 15px 5px;">-</td>
                             </tr>
                         </tbody>
                     </table>
                 </div>
             </div>
         </div>
-    </div>
-
-
-
-    <section class="faq-section">
-        <h2>Frequently Asked Questions</h2>
-        <details class="faq-item">
-            <summary>Is my data safe?</summary>
-            <p>We never store your files. Your data is processed securely and deleted from our servers the moment you're done.</p>
-        </details>
-        <details class="faq-item">
-            <summary>How accurate is the categorization?</summary>
-            <p>It's highly accurate! We automatically match your transactions against 50 standard business categories so you don't have to.</p>
-        </details>
-        <details class="faq-item">
-            <summary>Can I export the results?</summary>
-            <p>Absolutely. You can easily download your results as a CSV file to use anywhere you need.</p>
-        </details>
-    </section>
-    <div style="text-align: center; margin: 40px 0;">
-        <a href="signup.html" class="primary-cta">Start Free Trial (No Card Required)</a>
-    </div>
-    <footer class="site-footer">
-        <div class="security-badge">
-            <h4>🔒 Enterprise-Grade Privacy</h4>
-            <p>Data Retention Policy: We do not store, view, or sell your uploaded files. All expense parsing is performed securely via encrypted real-time API sessions. Once you close your browser tab, your financial data is permanently cleared from memory.</p>
+        
+        <div class="cookie-banner">
+            <div class="cookie-content">
+                <strong>4. Contact Us</strong><br><br>
+                If you have any questions or suggestions about our Privacy Policy, do not hesitate to contact us at <a href="mailto:support@finparse.com" style="color: var(--accent);">support@finparse.com</a>.
+            </div>
+            <button class="cookie-btn" onclick="this.parentElement.style.display='none'">Accept</button>
         </div>
-    </footer>
-    <script src="landing.js?v=7"></script>
+    </div>
+
+    <script src="landing.js?v=5"></script>
 </body>
 </html>
