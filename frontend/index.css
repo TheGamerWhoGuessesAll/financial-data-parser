@@ -1,11 +1,11 @@
-
 :root {
     --bg-dark: #f1f5f9;
     --bg-darker: #ffffff;
     --bg-nav: #ffffff;
-    --text: #334155;
+    --text: #1e293b;
     --text-light: #64748b;
     --primary: #2563eb;
+    --border: #cbd5e1;
     --primary-hover: #1d4ed8;
     --accent: #00e5ff;
 }
@@ -178,7 +178,7 @@ body {
     line-height: 1.1;
     margin: 0 0 20px 0;
     font-weight: 800;
-    color: #f1f1f1;
+    color: var(--text);
 }
 .hero p {
     font-size: 28px;
@@ -225,10 +225,10 @@ body {
     right: 20px;
     max-width: 1200px;
     margin: 0 auto;
-    background: #111;
-    border: 1px solid #333;
+    background-color: white;
+    border: 1px solid var(--border);
     border-radius: 12px;
-    box-shadow: 0 10px 30px rgba(0,0,0,0.8);
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
     z-index: 2000;
     display: flex;
     align-items: center;
@@ -243,7 +243,7 @@ body {
 }
 .cookie-content {
     flex: 1;
-    color: #ccc;
+    color: var(--text);
     font-size: 14px;
     line-height: 1.5;
     margin-right: 40px;
@@ -339,7 +339,7 @@ body {
     text-align: center;
     max-width: 500px;
     margin: 0 auto;
-    box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
 }
 .dropzone {
     border: 2px dashed #cbd5e1;
@@ -578,16 +578,12 @@ body {
     filter: brightness(1.1);
 }
 
-.hero h1 {
-    color: var(--text);
-}
-
 .sandbox-container {
     background: #ffffff;
     border: 1px solid #e2e8f0;
-    border-radius: 12px;
-    padding: 24px;
-    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+    border-radius: 8px;
+    padding: 20px;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
     width: 100%;
     max-width: 500px;
     text-align: center;
@@ -634,8 +630,8 @@ body {
     100% { background-color: #fef08a; opacity: 1; transform: scale(1); }
 }
 
-.row-anomaly {
-    background-color: #fef08a !important;
+.row-exception {
+    background-color: #fee2e2 !important;
     color: #854d0e !important;
     font-weight: 500;
     animation: anomalyPulse 0.6s ease-out forwards;
