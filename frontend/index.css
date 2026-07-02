@@ -609,6 +609,40 @@ body {
     cursor: not-allowed;
 }
 
+.btn-primary {
+    background: linear-gradient(135deg, var(--primary-color) 0%, #1a365d 100%);
+    color: white;
+    padding: 12px 24px;
+    border: none;
+    border-radius: 8px;
+    font-weight: 600;
+    cursor: pointer;
+    font-size: 1rem;
+    transition: all 0.2s ease;
+    box-shadow: 0 4px 6px -1px rgba(37, 99, 235, 0.2);
+}
+
+.btn-primary:hover {
+    background: linear-gradient(135deg, #1a365d 0%, var(--primary-color) 100%);
+    transform: translateY(-1px);
+    box-shadow: 0 6px 12px -2px rgba(37, 99, 235, 0.3);
+}
+
+.landing-page {
+    background: linear-gradient(to bottom, #f8fafc 0%, #e2e8f0 100%);
+    min-height: 100vh;
+}
+
+.hero {
+    text-align: center;
+    padding: 80px 20px;
+    background: white;
+    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05);
+    margin: 40px auto;
+    max-width: 900px;
+    border-radius: 16px;
+}
+
 .sandbox-table {
     width: 100%;
     border-collapse: collapse;
