@@ -33,21 +33,31 @@ document.addEventListener('DOMContentLoaded', () => {
             sandboxBtn.disabled = true;
             sandboxBtn.innerText = 'Scanning...';
             
-            // AI variation phrases
-            const aiPhrases = [
-                "Requires Review: AI Flag",
-                "Flagged by AI",
-                "Attention Needed: AI Detection",
-                "AI Exception Detected",
-                "Automated Flag",
-                "Review Suggested: AI System",
-                "Suspicious Activity Detected by AI"
+            // Full sentence AI variations for Row 3 (Netflix)
+            const netflixPhrases = [
+                "Flagged by AI: Netflix is typically considered personal entertainment and may violate company card policy.",
+                "Requires Review: AI detected a subscription service (Netflix) which often falls outside approved business expenses.",
+                "AI Exception Detected: Streaming services like Netflix are usually not permitted on corporate ledgers.",
+                "Attention Needed: Potential policy violation. AI flagged Netflix as a non-business entertainment expense."
             ];
             
-            const getRandomPhrase = (suffix) => {
-                const prefix = aiPhrases[Math.floor(Math.random() * aiPhrases.length)];
-                return `${prefix} - ${suffix}`;
-            };
+            // Full sentence AI variations for Row 6 (AWS Duplicate)
+            const awsPhrases = [
+                "Review Suggested: AI System noticed this is the second AWS charge in a short timeframe, indicating a possible duplicate.",
+                "Automated Flag: AI detected a duplicate active subscription payment for Amazon Web Services.",
+                "Flagged by AI: This AWS transaction appears to be a redundant or duplicate charge.",
+                "AI Exception: Multiple Amazon Web Services charges detected. Please verify if this is a duplicate billing."
+            ];
+            
+            // Full sentence AI variations for Row 10 (Gambling)
+            const casinoPhrases = [
+                "Suspicious Activity Detected by AI: Transactions at casinos (MGM Grand) are strictly prohibited.",
+                "AI Flag: High-risk vendor identified. Gambling and casino charges are not allowed.",
+                "Requires Review: AI categorized this vendor as a casino/gambling establishment, violating policy.",
+                "Automated Exception: AI flagged MGM Grand Casino. Corporate funds cannot be used for gambling."
+            ];
+            
+            const getRandom = (arr) => arr[Math.floor(Math.random() * arr.length)];
             
             // Clear existing formatting if rescanning
             const exceptionRows = document.querySelectorAll('.row-exception');
@@ -70,11 +80,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 document.getElementById('row-10').className = 'row-exception';
                 
                 // Update reason text
-                document.querySelector('#row-3 .reason-cell').innerText = getRandomPhrase("Personal entertainment on company card");
+                document.querySelector('#row-3 .reason-cell').innerText = getRandom(netflixPhrases);
                 document.querySelector('#row-5 .reason-cell').innerText = "HIGH AMOUNT: MAY REQUIRE REVIEW. Severe Exception. Amount 4500.0 is 10.5x higher than category norm.";
-                document.querySelector('#row-6 .reason-cell').innerText = getRandomPhrase("Duplicate active subscription payment");
+                document.querySelector('#row-6 .reason-cell').innerText = getRandom(awsPhrases);
                 document.querySelector('#row-9 .reason-cell').innerText = "Requires Review: Amount 112.50 exceeds meals policy limit of 100.00";
-                document.querySelector('#row-10 .reason-cell').innerText = getRandomPhrase("Gambling on company ledger");
+                document.querySelector('#row-10 .reason-cell').innerText = getRandom(casinoPhrases);
                 
             }, 1000);
         });
