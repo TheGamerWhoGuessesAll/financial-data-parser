@@ -49,9 +49,18 @@ document.addEventListener('DOMContentLoaded', () => {
                 return `${prefix} - ${suffix}`;
             };
             
+            // Clear existing formatting if rescanning
+            const exceptionRows = document.querySelectorAll('.row-exception');
+            exceptionRows.forEach(row => {
+                row.className = '';
+                row.querySelector('.reason-cell').innerText = '-';
+            });
+            
             // simulate 1-second scanning animation
             setTimeout(() => {
-                sandboxBtn.innerText = 'Scan Complete';
+                // Re-enable button for another scan
+                sandboxBtn.disabled = false;
+                sandboxBtn.innerText = 'Scan Again';
                 
                 // Add exception class to rows
                 document.getElementById('row-3').className = 'row-exception';
