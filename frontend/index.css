@@ -671,6 +671,57 @@ body {
     animation: anomalyPulse 0.6s ease-out forwards;
 }
 
+/* Cookie Banner Styles */
+.cookie-banner {
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: white;
+    padding: 20px 24px;
+    border-radius: 12px;
+    box-shadow: 0 10px 40px -10px rgba(0, 0, 0, 0.2);
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    z-index: 1000;
+    max-width: 650px;
+    width: 90%;
+    border: 1px solid #e2e8f0;
+}
+
+.cookie-content {
+    font-size: 0.9rem;
+    color: #475569;
+    flex: 1;
+    line-height: 1.5;
+}
+
+.cookie-content strong {
+    color: #1e293b;
+    font-size: 1rem;
+    display: inline-block;
+    margin-bottom: 4px;
+}
+
+.cookie-btn {
+    background: linear-gradient(135deg, var(--primary-color) 0%, #1a365d 100%);
+    color: white;
+    border: none;
+    padding: 10px 24px;
+    border-radius: 8px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+    box-shadow: 0 4px 6px -1px rgba(37, 99, 235, 0.2);
+}
+
+.cookie-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 6px 12px -2px rgba(37, 99, 235, 0.3);
+}
+
 /* Adjustments for light theme visibility */
 .faq-section h2 {
     color: var(--text);
