@@ -494,7 +494,7 @@ async def process_file_task(task_id: str, contents: bytes, is_csv: bool, is_pdf:
             elif tier == 'pro':
                 limit = 5000
             else:
-                limit = float('inf')
+                limit = 100000
                 
             if user.rows_processed_this_month + effective_rows > limit:
                 raise ValueError(f"Limit Exceeded: This file contains {effective_rows} rows, but you only have {limit - user.rows_processed_this_month} rows remaining in your {tier.capitalize()} plan this month.")
@@ -1057,7 +1057,7 @@ def get_user_me(current_user: User = Depends(get_current_user)):
     elif tier == 'pro':
         limit = 5000
     else:
-        limit = 'Unlimited'
+        limit = 100000
         
     now = datetime.now()
     if not current_user.last_reset_date or current_user.last_reset_date.month != now.month or current_user.last_reset_date.year != now.year:
