@@ -164,7 +164,7 @@ ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7 # 7 days
 
 import bcrypt
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login", auto_error=False)
 
 def verify_password(plain_password, hashed_password):
     return bcrypt.checkpw(plain_password.encode('utf-8'), hashed_password.encode('utf-8'))
@@ -179,12 +179,24 @@ def create_access_token(data: dict):
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
 
-def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
+from fastapi.security import APIKeyHeader
+api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
+
+def get_current_user(token: str = Depends(oauth2_scheme), api_key: str = Depends(api_key_header), db: Session = Depends(get_db)):
+    if api_key:
+        user = db.query(User).filter(User.api_key == api_key).first()
+        if user:
+            return user
+        raise HTTPException(status_code=401, detail="Invalid API Key")
+        
     credentials_exception = HTTPException(
         status_code=401,
         detail="Could not validate credentials",
         headers={"WWW-Authenticate": "Bearer"},
     )
+    if not token:
+        raise credentials_exception
+        
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         email: str = payload.get("sub")
@@ -337,20 +349,18 @@ TASK_STORE = {}
 async def upload_file(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
+    priority: bool = Form(False),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
+    tier = current_user.subscription_tier or 'free'
+    is_priority = priority and tier in ["pro", "unlimited"]
+    content = await file.read()
     is_pdf = file.filename and file.filename.lower().endswith('.pdf')
     is_csv = file.filename and file.filename.lower().endswith('.csv')
     
     if not (is_pdf or is_csv):
         raise HTTPException(status_code=400, detail="Only .csv and .pdf files are supported")
-
-    # Limit checking will happen in the background task to avoid blocking the HTTP response
-    # Read the uploaded file
-    contents = await file.read()
-    if len(contents) > 20 * 1024 * 1024:
-        raise HTTPException(status_code=400, detail="File too large. Maximum size is 20MB.")
     
     task_id = str(uuid.uuid4())
     TASK_STORE[task_id] = {
@@ -362,8 +372,11 @@ async def upload_file(
         "user_email": current_user.email
     }
     
-    background_tasks.add_task(process_file_task, task_id, contents, is_csv, is_pdf, current_user.id)
-    return {"task_id": task_id}
+    if file.size and file.size > 20 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="File too large. Maximum size is 20MB.")
+        
+    background_tasks.add_task(process_file_task, task_id, content, is_csv, is_pdf, current_user.id, is_priority)
+    return {"task_id": task_id, "message": "Processing started in background."}
 
 @app.get("/status/{task_id}")
 async def get_status(task_id: str, current_user: User = Depends(get_current_user)):
@@ -411,7 +424,13 @@ async def download_file(task_id: str, format: str = "excel", current_user: User 
         headers={"Content-Disposition": f"attachment; filename={excel_filename}"}
     )
 
-async def process_file_task(task_id: str, contents: bytes, is_csv: bool, is_pdf: bool, user_id: int):
+import ast
+import time
+
+async def process_file_task(task_id: str, contents: bytes, is_csv: bool, is_pdf: bool, user_id: int, is_priority: bool = False):
+    if not is_priority:
+        time.sleep(5) # Artificial queue delay for non-priority users
+        
     try:
         global_warnings = []
         TASK_STORE[task_id]["message"] = "Extracting data..."
@@ -477,9 +496,12 @@ async def process_file_task(task_id: str, contents: bytes, is_csv: bool, is_pdf:
                 
             if user.custom_rules:
                 try:
-                    custom_rules_dict = json.loads(user.custom_rules)
+                    custom_rules_dict = ast.literal_eval(user.custom_rules)
                 except Exception:
-                    pass
+                    try:
+                        custom_rules_dict = json.loads(user.custom_rules)
+                    except Exception:
+                        pass
                 
             # Check for monthly reset
             now = datetime.now()
